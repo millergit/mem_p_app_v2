@@ -14,6 +14,7 @@ import {
   ScrollView,
   FlatList
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TwilioService from '../services/TwilioService';
 import MessageService from '../services/MessageService';
 import { Contact } from '../types/Contact';
@@ -37,6 +38,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
   const flatListRef = React.useRef<FlatList>(null);
   const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
   const [caregiverNotifications] = useState(() => CaregiverNotificationService.getInstance());
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     // Small delay to ensure proper component mounting and SafeAreaView rendering
@@ -252,8 +254,8 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
-      <SafeAreaView style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: '#000', paddingTop: insets.top }}>
+      <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backButtonText}>← Back</Text>
@@ -342,7 +344,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

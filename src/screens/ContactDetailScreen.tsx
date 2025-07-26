@@ -10,6 +10,7 @@ import {
   ScrollView,
   BackHandler
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TwilioService from '../services/TwilioService';
 import { Contact } from '../types/Contact';
 import FrequencyTracker from '../services/FrequencyTracker';
@@ -26,6 +27,7 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
   const [twilioConfigured, setTwilioConfigured] = useState(false);
   const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
   const [caregiverNotifications] = useState(() => CaregiverNotificationService.getInstance());
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     checkTwilioConfig();
@@ -157,8 +159,8 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
-      <SafeAreaView 
+    <View style={{ flex: 1, backgroundColor: '#000', paddingTop: insets.top }}>
+      <View 
         style={styles.container}
         accessibilityActions={accessibilityActions}
         onAccessibilityAction={onAccessibilityAction}
@@ -205,7 +207,7 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
           </TouchableOpacity>
         </View>
       </ScrollView>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Animated, Dimensions, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ContactsScreen from './src/screens/ContactsScreen';
 import ContactDetailScreen from './src/screens/ContactDetailScreen';
 import MessageScreen from './src/screens/MessageScreen';
@@ -42,10 +43,13 @@ export default function App() {
     const delay = 16;
     
     setTimeout(() => {
-      // Start with opacity fade for next screen, then slide
+      // Start with opacity fade for next screen, then slide  
+      // Longer opacity animation for back navigation to ContactsScreen to prevent flicker
+      const opacityDuration = (isBackNavigation && newScreen === 'contacts') ? 150 : 100;
+      
       Animated.timing(nextOpacityAnim, {
         toValue: 1,
-        duration: 100,
+        duration: opacityDuration,
         useNativeDriver: true,
       }).start(() => {
         // Now animate both screens simultaneously
@@ -139,7 +143,7 @@ export default function App() {
   };
 
   return (
-    <>
+    <SafeAreaProvider>
       <View style={{ flex: 1, position: 'relative' }}>
         {/* Current Screen */}
         <Animated.View 
@@ -189,6 +193,6 @@ export default function App() {
         onSuccess={handlePinSuccess}
       />
       <StatusBar style="light" />
-    </>
+    </SafeAreaProvider>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, SafeAreaView, FlatList, View, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ContactCard from '../components/ContactCard';
 import { Contact } from '../types/Contact';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -49,6 +50,7 @@ let hasInitiallyLoaded = false;
 export default function ContactsScreen({ onContactPress, onPinEntryPress }: ContactsScreenProps) {
   const [contacts, setContacts] = useState<Contact[]>(contactsCache || []);
   const [isLoading, setIsLoading] = useState(!hasInitiallyLoaded);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     // If we already have cached data, use it immediately
@@ -60,7 +62,10 @@ export default function ContactsScreen({ onContactPress, onPinEntryPress }: Cont
     
     // Only load if we haven't loaded before
     if (!hasInitiallyLoaded) {
-      loadSelectedContacts();
+      // Small delay to ensure SafeAreaView is properly rendered first
+      setTimeout(() => {
+        loadSelectedContacts();
+      }, 50);
     }
   }, []);
 
@@ -103,29 +108,35 @@ export default function ContactsScreen({ onContactPress, onPinEntryPress }: Cont
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
-      <SafeAreaView style={styles.container}>
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading contacts...</Text>
+    <View style={{ flex: 1, backgroundColor: '#000', paddingTop: insets.top }}>
+      <View style={styles.container}>
+        <View style={styles.contentWrapper}>
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading contacts...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={contacts}
+              renderItem={renderContact}
+              keyExtractor={(item) => item.id}
+              numColumns={2}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+            />
+          )}
         </View>
-      ) : (
-        <FlatList
-          data={contacts}
-          renderItem={renderContact}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
-        />
-      )}
-      </SafeAreaView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  contentWrapper: {
     flex: 1,
     backgroundColor: '#000',
   },
