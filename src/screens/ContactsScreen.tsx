@@ -111,6 +111,9 @@ export default function ContactsScreen({ onContactPress, onPinEntryPress }: Cont
     <View style={{ flex: 1, backgroundColor: '#000', paddingTop: insets.top }}>
       <View style={styles.container}>
         <View style={styles.contentWrapper}>
+          <View style={styles.demoNotice}>
+            <Text style={styles.demoText}>📱 Demo Mode - Configure Twilio in Settings for calls/texts</Text>
+          </View>
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>Loading contacts...</Text>
@@ -139,6 +142,21 @@ const styles = StyleSheet.create({
   contentWrapper: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  demoNotice: {
+    backgroundColor: '#1a1a1a',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginHorizontal: 8,
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  demoText: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
   },
   listContent: {
     padding: 8,
