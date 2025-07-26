@@ -9,19 +9,28 @@ import {
   Image
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
 
 interface CameraScreenProps {
   onBack: () => void;
 }
 
 export default function CameraScreen({ onBack }: CameraScreenProps) {
-  const [lastPhoto, setLastPhoto] = useState<string | null>(null);
+  const [lastMedia, setLastMedia] = useState<{ uri: string; type: 'photo' | 'video' } | null>(null);
 
   const takePhoto = async () => {
     try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
+      // Request camera permissions
+      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+      if (cameraPermission.status !== 'granted') {
         Alert.alert('Permission needed', 'Please allow camera access to take photos');
+        return;
+      }
+
+      // Request media library permissions for saving
+      const mediaPermission = await MediaLibrary.requestPermissionsAsync();
+      if (mediaPermission.status !== 'granted') {
+        Alert.alert('Permission needed', 'Please allow photo library access to save photos');
         return;
       }
 
@@ -32,14 +41,65 @@ export default function CameraScreen({ onBack }: CameraScreenProps) {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setLastPhoto(result.assets[0].uri);
-        Alert.alert('Photo taken!', 'Your photo has been saved to your camera roll', [
-          { text: 'Take Another', onPress: () => {} },
-          { text: 'Done', onPress: onBack }
-        ]);
+        const photoUri = result.assets[0].uri;
+        setLastMedia({ uri: photoUri, type: 'photo' });
+
+        // Save to camera roll
+        try {
+          await MediaLibrary.saveToLibraryAsync(photoUri);
+          Alert.alert('Photo saved!', 'Your photo has been saved to your camera roll', [
+            { text: 'Take Another', onPress: () => {} },
+            { text: 'Done', onPress: onBack }
+          ]);
+        } catch (saveError) {
+          Alert.alert('Photo taken but not saved', 'Photo was taken but could not be saved to camera roll');
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  const takeVideo = async () => {
+    try {
+      // Request camera permissions
+      const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+      if (cameraPermission.status !== 'granted') {
+        Alert.alert('Permission needed', 'Please allow camera access to record videos');
+        return;
+      }
+
+      // Request media library permissions for saving
+      const mediaPermission = await MediaLibrary.requestPermissionsAsync();
+      if (mediaPermission.status !== 'granted') {
+        Alert.alert('Permission needed', 'Please allow photo library access to save videos');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: false,
+        quality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+        videoMaxDuration: 60, // 60 seconds max
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const videoUri = result.assets[0].uri;
+        setLastMedia({ uri: videoUri, type: 'video' });
+
+        // Save to camera roll
+        try {
+          await MediaLibrary.saveToLibraryAsync(videoUri);
+          Alert.alert('Video saved!', 'Your video has been saved to your camera roll', [
+            { text: 'Record Another', onPress: () => {} },
+            { text: 'Done', onPress: onBack }
+          ]);
+        } catch (saveError) {
+          Alert.alert('Video recorded but not saved', 'Video was recorded but could not be saved to camera roll');
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to record video. Please try again.');
     }
   };
 
@@ -53,19 +113,33 @@ export default function CameraScreen({ onBack }: CameraScreenProps) {
       </View>
 
       <View style={styles.content}>
-        {lastPhoto && (
-          <View style={styles.lastPhotoContainer}>
-            <Text style={styles.lastPhotoLabel}>Last photo taken:</Text>
-            <Image source={{ uri: lastPhoto }} style={styles.lastPhoto} />
+        {lastMedia && (
+          <View style={styles.lastMediaContainer}>
+            <Text style={styles.lastMediaLabel}>
+              Last {lastMedia.type} {lastMedia.type === 'photo' ? 'taken' : 'recorded'}:
+            </Text>
+            {lastMedia.type === 'photo' ? (
+              <Image source={{ uri: lastMedia.uri }} style={styles.lastMedia} />
+            ) : (
+              <View style={styles.videoPlaceholder}>
+                <Text style={styles.videoIcon}>🎥</Text>
+                <Text style={styles.videoText}>Video Recorded</Text>
+              </View>
+            )}
           </View>
         )}
 
         <View style={styles.cameraContainer}>
-          <Text style={styles.instruction}>Tap the button below to take a photo</Text>
+          <Text style={styles.instruction}>Choose what you want to capture:</Text>
           
-          <TouchableOpacity style={styles.cameraButton} onPress={takePhoto}>
-            <Text style={styles.cameraIcon}>📸</Text>
-            <Text style={styles.cameraButtonText}>Take Photo</Text>
+          <TouchableOpacity style={styles.photoButton} onPress={takePhoto}>
+            <Text style={styles.buttonIcon}>📸</Text>
+            <Text style={styles.buttonText}>Take Photo</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.videoButton} onPress={takeVideo}>
+            <Text style={styles.buttonIcon}>🎥</Text>
+            <Text style={styles.buttonText}>Record Video</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -108,21 +182,41 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
-  lastPhotoContainer: {
+  lastMediaContainer: {
     alignItems: 'center',
     marginBottom: 40,
   },
-  lastPhotoLabel: {
+  lastMediaLabel: {
     fontSize: 18,
     color: '#ccc',
     marginBottom: 12,
+    textAlign: 'center',
   },
-  lastPhoto: {
+  lastMedia: {
     width: 150,
     height: 150,
     borderRadius: 12,
     borderWidth: 2,
     borderColor: '#333',
+  },
+  videoPlaceholder: {
+    width: 150,
+    height: 150,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#333',
+    backgroundColor: '#1a1a1a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoIcon: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  videoText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   cameraContainer: {
     flex: 1,
@@ -136,11 +230,29 @@ const styles = StyleSheet.create({
     marginBottom: 40,
     paddingHorizontal: 20,
   },
-  cameraButton: {
+  photoButton: {
     backgroundColor: '#4A90E2',
-    paddingVertical: 32,
-    paddingHorizontal: 48,
-    borderRadius: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    minWidth: 200,
+    marginBottom: 20,
+  },
+  videoButton: {
+    backgroundColor: '#FF6B35',
+    paddingVertical: 24,
+    paddingHorizontal: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -153,13 +265,13 @@ const styles = StyleSheet.create({
     elevation: 8,
     minWidth: 200,
   },
-  cameraIcon: {
-    fontSize: 48,
+  buttonIcon: {
+    fontSize: 36,
     marginBottom: 8,
   },
-  cameraButtonText: {
+  buttonText: {
     color: '#fff',
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
   },
 });

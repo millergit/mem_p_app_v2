@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
   Image,
   Alert,
-  Dimensions
+  Dimensions,
+  RefreshControl
 } from 'react-native';
 import * as MediaLibrary from 'expo-media-library';
 
@@ -21,15 +22,23 @@ interface Photo {
 interface PhotoGalleryScreenProps {
   onBack: () => void;
   onPhotoPress: (photo: Photo) => void;
+  shouldRefresh?: boolean;
 }
 
-export default function PhotoGalleryScreen({ onBack, onPhotoPress }: PhotoGalleryScreenProps) {
+export default function PhotoGalleryScreen({ onBack, onPhotoPress, shouldRefresh }: PhotoGalleryScreenProps) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadPhotos();
   }, []);
+
+  useEffect(() => {
+    if (shouldRefresh) {
+      loadPhotos();
+    }
+  }, [shouldRefresh]);
 
   const loadPhotos = async () => {
     try {
@@ -72,7 +81,13 @@ export default function PhotoGalleryScreen({ onBack, onPhotoPress }: PhotoGaller
       Alert.alert('Error', 'Failed to load photos');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadPhotos();
   };
 
   const renderPhoto = ({ item }: { item: Photo }) => (
@@ -110,6 +125,14 @@ export default function PhotoGalleryScreen({ onBack, onPhotoPress }: PhotoGaller
           numColumns={2}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#fff"
+              colors={['#fff']}
+            />
+          }
         />
       )}
     </SafeAreaView>

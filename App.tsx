@@ -6,6 +6,7 @@ import MessageScreen from './src/screens/MessageScreen';
 import PhotoGalleryScreen from './src/screens/PhotoGalleryScreen';
 import PhotoViewScreen from './src/screens/PhotoViewScreen';
 import CameraScreen from './src/screens/CameraScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import { Contact } from './src/types/Contact';
 
 interface Photo {
@@ -14,7 +15,7 @@ interface Photo {
   filename: string;
 }
 
-type Screen = 'contacts' | 'detail' | 'message' | 'photos' | 'photoView' | 'camera';
+type Screen = 'contacts' | 'detail' | 'message' | 'photos' | 'photoView' | 'camera' | 'settings';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('contacts');
@@ -37,6 +38,10 @@ export default function App() {
 
   const handleCameraPress = () => {
     setCurrentScreen('camera');
+  };
+
+  const handleSettingsPress = () => {
+    setCurrentScreen('settings');
   };
 
   const handlePhotoPress = (photo: Photo) => {
@@ -89,12 +94,17 @@ export default function App() {
         return (
           <CameraScreen onBack={handleBack} />
         );
+      case 'settings':
+        return (
+          <SettingsScreen onBack={handleBack} />
+        );
       default:
         return (
           <ContactsScreen 
             onContactPress={handleContactPress}
             onPhotosPress={handlePhotosPress}
             onCameraPress={handleCameraPress}
+            onSettingsPress={handleSettingsPress}
           />
         );
     }

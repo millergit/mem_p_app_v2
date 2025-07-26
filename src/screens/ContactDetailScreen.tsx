@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -8,7 +8,7 @@ import {
   Image,
   Alert
 } from 'react-native';
-import * as Linking from 'expo-linking';
+import TwilioService from '../services/TwilioService';
 import { Contact } from '../types/Contact';
 
 interface ContactDetailScreenProps {
@@ -18,17 +18,43 @@ interface ContactDetailScreenProps {
 }
 
 export default function ContactDetailScreen({ contact, onBack, onMessage }: ContactDetailScreenProps) {
+  const [isCalling, setIsCalling] = useState(false);
+  const [twilioConfigured, setTwilioConfigured] = useState(false);
+
+  useEffect(() => {
+    checkTwilioConfig();
+  }, []);
+
+  const checkTwilioConfig = async () => {
+    await TwilioService.loadConfig();
+    setTwilioConfigured(TwilioService.isConfigured());
+  };
+
   const handleCall = async () => {
+    if (!twilioConfigured) {
+      Alert.alert(
+        'Twilio Not Configured', 
+        'Please configure Twilio settings first to make calls.',
+        [
+          { text: 'OK', style: 'cancel' },
+          { text: 'Go to Settings', onPress: () => {} } // You can add navigation to settings here
+        ]
+      );
+      return;
+    }
+
+    setIsCalling(true);
     try {
-      const phoneUrl = `tel:${contact.phoneNumber}`;
-      const canOpen = await Linking.canOpenURL(phoneUrl);
-      if (canOpen) {
-        await Linking.openURL(phoneUrl);
-      } else {
-        Alert.alert('Error', 'Cannot make phone calls on this device');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to make call');
+      await TwilioService.makeCall(contact.phoneNumber);
+      Alert.alert(
+        'Call Started!', 
+        `Calling ${contact.name} via Twilio. You should receive a call shortly.`,
+        [{ text: 'OK', onPress: onBack }]
+      );
+    } catch (error: any) {
+      Alert.alert('Call Failed', error.message || 'Failed to make call. Please try again.');
+    } finally {
+      setIsCalling(false);
     }
   };
 
@@ -61,8 +87,14 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
         </View>
 
         <View style={styles.buttonContainer}>
-          <TouchableOpacity style={[styles.button, styles.callButton]} onPress={handleCall}>
-            <Text style={styles.buttonText}>📞 Call {contact.name}</Text>
+          <TouchableOpacity 
+            style={[styles.button, styles.callButton, isCalling && styles.buttonDisabled]} 
+            onPress={handleCall}
+            disabled={isCalling}
+          >
+            <Text style={styles.buttonText}>
+              {isCalling ? '📞 Calling...' : `📞 Call ${contact.name}`}
+            </Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={[styles.button, styles.textButton]} onPress={handleText}>
@@ -159,6 +191,9 @@ const styles = StyleSheet.create({
   },
   textButton: {
     backgroundColor: '#2196F3',
+  },
+  buttonDisabled: {
+    backgroundColor: '#666',
   },
   buttonText: {
     color: '#fff',

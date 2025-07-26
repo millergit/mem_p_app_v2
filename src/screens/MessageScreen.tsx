@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
-import * as SMS from 'expo-sms';
+import TwilioService from '../services/TwilioService';
 import { Contact } from '../types/Contact';
 
 interface MessageScreenProps {
@@ -21,6 +21,16 @@ interface MessageScreenProps {
 export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [twilioConfigured, setTwilioConfigured] = useState(false);
+
+  useEffect(() => {
+    checkTwilioConfig();
+  }, []);
+
+  const checkTwilioConfig = async () => {
+    await TwilioService.loadConfig();
+    setTwilioConfigured(TwilioService.isConfigured());
+  };
 
   const sendMessage = async () => {
     if (!message.trim()) {
@@ -28,28 +38,30 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
       return;
     }
 
+    if (!twilioConfigured) {
+      Alert.alert(
+        'Twilio Not Configured', 
+        'Please configure Twilio settings first to send messages.',
+        [
+          { text: 'OK', style: 'cancel' },
+          { text: 'Go to Settings', onPress: () => {} } // You can add navigation to settings here
+        ]
+      );
+      return;
+    }
+
     setIsSending(true);
     try {
-      const isAvailable = await SMS.isAvailableAsync();
-      if (isAvailable) {
-        const result = await SMS.sendSMSAsync([contact.phoneNumber], message);
-        if (result.result === 'sent') {
-          Alert.alert('Success!', 'Your message was sent!', [
-            { text: 'OK', onPress: () => {
-              setMessage('');
-              onBack();
-            }}
-          ]);
-        } else {
-          Alert.alert('Message Ready', 'Your message is ready to send!', [
-            { text: 'OK', onPress: onBack }
-          ]);
-        }
-      } else {
-        Alert.alert('Not Available', 'Messaging is not available on this device');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Could not send message. Please try again.');
+      await TwilioService.sendSMS(contact.phoneNumber, message.trim());
+      Alert.alert('Message Sent!', `Your message was sent to ${contact.name} via Twilio.`, [
+        { text: 'Send Another', onPress: () => setMessage('') },
+        { text: 'Done', onPress: () => {
+          setMessage('');
+          onBack();
+        }}
+      ]);
+    } catch (error: any) {
+      Alert.alert('Send Failed', error.message || 'Could not send message. Please try again.');
     } finally {
       setIsSending(false);
     }

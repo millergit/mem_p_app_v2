@@ -8,13 +8,14 @@ interface ContactsScreenProps {
   onContactPress: (contact: Contact) => void;
   onPhotosPress: () => void;
   onCameraPress: () => void;
+  onSettingsPress: () => void;
 }
 
 const sampleContacts: Contact[] = [
   {
     id: '1',
     name: 'Matt',
-    phoneNumber: '4406788672',
+    phoneNumber: '+14407730373',
     birthdate: 'March 15, 1985',
   },
   {
@@ -39,7 +40,7 @@ const sampleContacts: Contact[] = [
 
 type GridItem = Contact | { type: 'app'; id: string; title: string; icon: string; backgroundColor: string; onPress: () => void };
 
-export default function ContactsScreen({ onContactPress, onPhotosPress, onCameraPress }: ContactsScreenProps) {
+export default function ContactsScreen({ onContactPress, onPhotosPress, onCameraPress, onSettingsPress }: ContactsScreenProps) {
   const gridData: GridItem[] = [
     ...sampleContacts,
     {
@@ -57,6 +58,14 @@ export default function ContactsScreen({ onContactPress, onPhotosPress, onCamera
       icon: '📸',
       backgroundColor: '#4A90E2',
       onPress: onCameraPress,
+    },
+    {
+      type: 'app',
+      id: 'settings',
+      title: 'Settings',
+      icon: '⚙️',
+      backgroundColor: '#9C27B0',
+      onPress: onSettingsPress,
     },
   ];
 
