@@ -14,8 +14,9 @@ import {
 } from 'react-native';
 import TwilioService, { TwilioConfig } from '../services/TwilioService';
 import ContactSelector from '../components/ContactSelector';
-import { Contact } from '../types/Contact';
+import { Contact, ContactFrequencySettings } from '../types/Contact';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import FrequencyTracker, { BlockedMessage, BlockedCall } from '../services/FrequencyTracker';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -26,14 +27,18 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [authToken, setAuthToken] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [saving, setSaving] = useState(false);
-  const [currentTab, setCurrentTab] = useState<'twilio' | 'contacts' | 'display'>('twilio');
+  const [currentTab, setCurrentTab] = useState<'twilio' | 'contacts' | 'display' | 'communication'>('twilio');
   const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
   const [showConversations, setShowConversations] = useState(true);
+  const [blockedMessages, setBlockedMessages] = useState<BlockedMessage[]>([]);
+  const [blockedCalls, setBlockedCalls] = useState<BlockedCall[]>([]);
+  const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
 
   useEffect(() => {
     loadExistingConfig();
     loadSelectedContacts();
     loadDisplaySettings();
+    loadBlockedMessages();
     
     // iOS Assistive Access back button handling
     const onBackPress = () => {
@@ -81,6 +86,16 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     }
   };
 
+  const loadBlockedMessages = async () => {
+    try {
+      await frequencyTracker.loadRecords();
+      setBlockedMessages(frequencyTracker.getBlockedMessages());
+      setBlockedCalls(frequencyTracker.getBlockedCalls());
+    } catch (error) {
+      console.error('Failed to load blocked communications:', error);
+    }
+  };
+
   const saveSelectedContacts = async (contacts: Contact[]) => {
     try {
       await AsyncStorage.setItem('selected_contacts', JSON.stringify(contacts));
@@ -89,6 +104,105 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     } catch (error) {
       Alert.alert('Error', 'Failed to save selected contacts');
     }
+  };
+
+  const updateContactFrequencySettings = async (contactId: string, settings: ContactFrequencySettings) => {
+    try {
+      // Auto-enable frequency limits when they're set below default values
+      const autoEnabledSettings = {
+        ...settings,
+        calls: {
+          ...settings.calls,
+          enabled: settings.calls.maxPerHour < 10 || settings.calls.maxPerDay < 20
+        },
+        texts: {
+          ...settings.texts,
+          enabled: settings.texts.maxPerHour < 20 || settings.texts.maxPerDay < 50
+        }
+      };
+
+      const updatedContacts = selectedContacts.map(contact => 
+        contact.id === contactId 
+          ? { ...contact, frequencySettings: autoEnabledSettings }
+          : contact
+      );
+      await AsyncStorage.setItem('selected_contacts', JSON.stringify(updatedContacts));
+      setSelectedContacts(updatedContacts);
+    } catch (error) {
+      console.error('Failed to update settings:', error);
+    }
+  };
+
+  const viewBlockedMessages = async () => {
+    if (blockedMessages.length === 0 && blockedCalls.length === 0) {
+      Alert.alert('No Blocked Communications', 'There are no blocked calls or messages to display.');
+      return;
+    }
+
+    let alertMessage = '';
+    
+    if (blockedMessages.length > 0) {
+      alertMessage += `BLOCKED MESSAGES (${blockedMessages.length}):\n\n`;
+      blockedMessages.slice(-5).forEach((msg, index) => {
+        const contact = selectedContacts.find(c => c.id === msg.contactId);
+        const date = new Date(msg.timestamp).toLocaleString();
+        alertMessage += `${index + 1}. ${contact?.name || 'Unknown'} (${date}):\n"${msg.message}"\n\n`;
+      });
+    }
+    
+    if (blockedCalls.length > 0) {
+      alertMessage += `BLOCKED CALLS (${blockedCalls.length}):\n\n`;
+      blockedCalls.slice(-5).forEach((call, index) => {
+        const contact = selectedContacts.find(c => c.id === call.contactId);
+        const date = new Date(call.timestamp).toLocaleString();
+        alertMessage += `${index + 1}. ${contact?.name || 'Unknown'} (${date})\n`;
+      });
+    }
+    
+    if (blockedMessages.length > 5 || blockedCalls.length > 5) {
+      alertMessage += '\n(Showing most recent 5 of each type)';
+    }
+
+    Alert.alert('Blocked Communications', alertMessage, [{ text: 'OK' }]);
+  };
+
+  const clearBlockedMessages = async () => {
+    Alert.alert(
+      'Clear Blocked Messages',
+      'Are you sure you want to clear all blocked messages?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            await frequencyTracker.clearBlockedMessages();
+            setBlockedMessages([]);
+            Alert.alert('Cleared', 'All blocked messages have been cleared.');
+          },
+        },
+      ]
+    );
+  };
+
+  const clearAllBlocked = async () => {
+    Alert.alert(
+      'Clear All Blocked Communications',
+      'Are you sure you want to clear all blocked calls and messages?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            await frequencyTracker.clearAllBlocked();
+            setBlockedMessages([]);
+            setBlockedCalls([]);
+            Alert.alert('Cleared', 'All blocked communications have been cleared.');
+          },
+        },
+      ]
+    );
   };
 
   const saveDisplaySettings = async (showConv: boolean) => {
@@ -205,6 +319,14 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
             Display
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, currentTab === 'communication' && styles.activeTab]}
+          onPress={() => setCurrentTab('communication')}
+        >
+          <Text style={[styles.tabText, currentTab === 'communication' && styles.activeTabText]}>
+            Limits
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.content}>
@@ -280,6 +402,250 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
               onContactsChange={saveSelectedContacts}
             />
           </View>
+        ) : currentTab === 'communication' ? (
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.tabContent}>
+            <View style={styles.infoBox}>
+              <Text style={styles.infoTitle}>🚦 Communication Limits</Text>
+              <Text style={styles.infoText}>
+                Set limits on how often calls and texts can be made to each contact. Helpful for managing repetitive communications.
+              </Text>
+            </View>
+
+            {(blockedMessages.length > 0 || blockedCalls.length > 0) && (
+              <View style={[styles.infoBox, { backgroundColor: '#2a1a00' }]}>
+                <Text style={styles.infoTitle}>
+                  🚫 Blocked Communications ({blockedMessages.length + blockedCalls.length})
+                </Text>
+                <Text style={styles.infoText}>
+                  📝 {blockedMessages.length} blocked messages{'\n'}
+                  📞 {blockedCalls.length} blocked calls{'\n'}
+                  These are stored for caregiver review.
+                </Text>
+                
+                <TouchableOpacity 
+                  style={[styles.saveButton, { backgroundColor: '#4a4a4a', marginBottom: 12 }]} 
+                  onPress={viewBlockedMessages}
+                >
+                  <Text style={styles.saveButtonText}>📋 View Details</Text>
+                </TouchableOpacity>
+                
+                <View style={styles.blockedButtonRow}>
+                  <TouchableOpacity 
+                    style={styles.blockedClearButton} 
+                    onPress={clearBlockedMessages}
+                  >
+                    <Text style={styles.clearButtonText}>Clear Messages</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.blockedClearButton} 
+                    onPress={clearAllBlocked}
+                  >
+                    <Text style={styles.clearButtonText}>Clear All</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {selectedContacts.map(contact => {
+              const settings = contact.frequencySettings || frequencyTracker.getDefaultFrequencySettings();
+              const stats = frequencyTracker.getCommunicationStats(contact.id);
+              
+              return (
+                <View key={contact.id} style={styles.contactSettingsCard}>
+                  <Text style={styles.contactName}>{contact.name}</Text>
+                  <Text style={styles.contactStats}>
+                    Today: {stats.calls} calls, {stats.texts} texts
+                  </Text>
+                  
+                  <View style={styles.settingSection}>
+                    <Text style={styles.sectionTitle}>📞 Call Limits</Text>
+                    <View style={styles.toggleContainer}>
+                      <TouchableOpacity
+                        style={[styles.toggleButton, !settings.calls.enabled && styles.toggleButtonActive]}
+                        onPress={() => updateContactFrequencySettings(contact.id, {
+                          ...settings,
+                          calls: { ...settings.calls, enabled: false }
+                        })}
+                      >
+                        <Text style={[styles.toggleText, !settings.calls.enabled && styles.toggleTextActive]}>
+                          No Limits
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.toggleButton, settings.calls.enabled && styles.toggleButtonActive]}
+                        onPress={() => updateContactFrequencySettings(contact.id, {
+                          ...settings,
+                          calls: { ...settings.calls, enabled: true }
+                        })}
+                      >
+                        <Text style={[styles.toggleText, settings.calls.enabled && styles.toggleTextActive]}>
+                          Set Limits
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    {settings.calls.enabled && (
+                      <View style={styles.limitsContainer}>
+                        <Text style={styles.limitLabel}>Per Hour: {settings.calls.maxPerHour}</Text>
+                        <View style={styles.limitButtons}>
+                          <TouchableOpacity 
+                            style={styles.limitButton}
+                            onPress={() => updateContactFrequencySettings(contact.id, {
+                              ...settings,
+                              calls: { ...settings.calls, maxPerHour: Math.max(1, settings.calls.maxPerHour - 1) }
+                            })}
+                          >
+                            <Text style={styles.limitButtonText}>-</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            style={styles.limitButton}
+                            onPress={() => updateContactFrequencySettings(contact.id, {
+                              ...settings,
+                              calls: { ...settings.calls, maxPerHour: settings.calls.maxPerHour + 1 }
+                            })}
+                          >
+                            <Text style={styles.limitButtonText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                        
+                        <Text style={styles.limitLabel}>Per Day: {settings.calls.maxPerDay}</Text>
+                        <View style={styles.limitButtons}>
+                          <TouchableOpacity 
+                            style={styles.limitButton}
+                            onPress={() => updateContactFrequencySettings(contact.id, {
+                              ...settings,
+                              calls: { ...settings.calls, maxPerDay: Math.max(1, settings.calls.maxPerDay - 1) }
+                            })}
+                          >
+                            <Text style={styles.limitButtonText}>-</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            style={styles.limitButton}
+                            onPress={() => updateContactFrequencySettings(contact.id, {
+                              ...settings,
+                              calls: { ...settings.calls, maxPerDay: settings.calls.maxPerDay + 1 }
+                            })}
+                          >
+                            <Text style={styles.limitButtonText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.settingSection}>
+                    <Text style={styles.sectionTitle}>💬 Text Limits</Text>
+                    <View style={styles.toggleContainer}>
+                      <TouchableOpacity
+                        style={[styles.toggleButton, !settings.texts.enabled && styles.toggleButtonActive]}
+                        onPress={() => updateContactFrequencySettings(contact.id, {
+                          ...settings,
+                          texts: { ...settings.texts, enabled: false }
+                        })}
+                      >
+                        <Text style={[styles.toggleText, !settings.texts.enabled && styles.toggleTextActive]}>
+                          No Limits
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.toggleButton, settings.texts.enabled && styles.toggleButtonActive]}
+                        onPress={() => updateContactFrequencySettings(contact.id, {
+                          ...settings,
+                          texts: { ...settings.texts, enabled: true }
+                        })}
+                      >
+                        <Text style={[styles.toggleText, settings.texts.enabled && styles.toggleTextActive]}>
+                          Set Limits
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    {settings.texts.enabled && (
+                      <View style={styles.limitsContainer}>
+                        <Text style={styles.limitLabel}>Per Hour: {settings.texts.maxPerHour}</Text>
+                        <View style={styles.limitButtons}>
+                          <TouchableOpacity 
+                            style={styles.limitButton}
+                            onPress={() => updateContactFrequencySettings(contact.id, {
+                              ...settings,
+                              texts: { ...settings.texts, maxPerHour: Math.max(1, settings.texts.maxPerHour - 1) }
+                            })}
+                          >
+                            <Text style={styles.limitButtonText}>-</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            style={styles.limitButton}
+                            onPress={() => updateContactFrequencySettings(contact.id, {
+                              ...settings,
+                              texts: { ...settings.texts, maxPerHour: settings.texts.maxPerHour + 1 }
+                            })}
+                          >
+                            <Text style={styles.limitButtonText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                        
+                        <Text style={styles.limitLabel}>Per Day: {settings.texts.maxPerDay}</Text>
+                        <View style={styles.limitButtons}>
+                          <TouchableOpacity 
+                            style={styles.limitButton}
+                            onPress={() => updateContactFrequencySettings(contact.id, {
+                              ...settings,
+                              texts: { ...settings.texts, maxPerDay: Math.max(1, settings.texts.maxPerDay - 1) }
+                            })}
+                          >
+                            <Text style={styles.limitButtonText}>-</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            style={styles.limitButton}
+                            onPress={() => updateContactFrequencySettings(contact.id, {
+                              ...settings,
+                              texts: { ...settings.texts, maxPerDay: settings.texts.maxPerDay + 1 }
+                            })}
+                          >
+                            <Text style={styles.limitButtonText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.settingSection}>
+                    <Text style={styles.sectionTitle}>📞 Voicemail Allowed</Text>
+                    <Text style={styles.settingDescription}>
+                      How many blocked calls can leave voicemail before being completely blocked
+                    </Text>
+                    
+                    <View style={styles.limitsContainer}>
+                      <Text style={styles.limitLabel}>Voicemails Allowed: {settings.voicemailAllowed}</Text>
+                      <View style={styles.limitButtons}>
+                        <TouchableOpacity 
+                          style={styles.limitButton}
+                          onPress={() => updateContactFrequencySettings(contact.id, {
+                            ...settings,
+                            voicemailAllowed: Math.max(0, settings.voicemailAllowed - 1)
+                          })}
+                        >
+                          <Text style={styles.limitButtonText}>-</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.limitButton}
+                          onPress={() => updateContactFrequencySettings(contact.id, {
+                            ...settings,
+                            voicemailAllowed: settings.voicemailAllowed + 1
+                          })}
+                        >
+                          <Text style={styles.limitButtonText}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.voicemailExplainer}>
+                        After {settings.voicemailAllowed} blocked calls, calls will show "busy" to caller
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} style={styles.tabContent}>
             <View style={styles.infoBox}>
@@ -503,5 +869,81 @@ const styles = StyleSheet.create({
   },
   toggleTextActive: {
     color: '#fff',
+  },
+  contactSettingsCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  contactName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  contactStats: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 16,
+  },
+  settingSection: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 12,
+  },
+  limitsContainer: {
+    marginTop: 12,
+    padding: 16,
+    backgroundColor: '#111',
+    borderRadius: 12,
+  },
+  limitLabel: {
+    fontSize: 16,
+    color: '#ccc',
+    marginBottom: 8,
+  },
+  limitButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  limitButton: {
+    backgroundColor: '#333',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  limitButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  voicemailExplainer: {
+    fontSize: 14,
+    color: '#888',
+    fontStyle: 'italic',
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  blockedButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  blockedClearButton: {
+    flex: 1,
+    backgroundColor: '#FF5722',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
   },
 });

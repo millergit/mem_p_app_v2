@@ -19,6 +19,7 @@ import MessageService from '../services/MessageService';
 import { Contact } from '../types/Contact';
 import { Message } from '../types/Message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import FrequencyTracker from '../services/FrequencyTracker';
 
 interface MessageScreenProps {
   contact: Contact;
@@ -32,6 +33,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [showConversations, setShowConversations] = useState(true);
   const flatListRef = React.useRef<FlatList>(null);
+  const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
 
   useEffect(() => {
     checkTwilioConfig();
@@ -142,7 +144,34 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
 
   const sendTextMessage = async () => {
     setIsSending(true);
+    
     try {
+      await frequencyTracker.loadRecords();
+      
+      if (!frequencyTracker.canCommunicate(contact, 'text')) {
+        await frequencyTracker.storeBlockedMessage(contact.id, message.trim());
+        
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        setMessage('');
+        
+        Alert.alert(
+          'Message Sent Successfully! ✅',
+          `Your message was sent to ${contact.name}.\n\nPhone: ${contact.phoneNumber}`,
+          [
+            { 
+              text: 'OK', 
+              style: 'default',
+              onPress: () => onBack() 
+            }
+          ],
+          { cancelable: false }
+        );
+        return;
+      }
+      
+      await frequencyTracker.recordCommunication(contact.id, 'text');
+      
       // Add a small delay to show loading state
       await new Promise(resolve => setTimeout(resolve, 800));
       

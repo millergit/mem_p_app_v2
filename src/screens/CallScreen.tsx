@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import * as Linking from 'expo-linking';
 import { Contact } from '../types/Contact';
+import FrequencyTracker from '../services/FrequencyTracker';
 
 interface CallScreenProps {
   contact: Contact;
@@ -18,10 +19,27 @@ interface CallScreenProps {
 
 export default function CallScreen({ contact, onBack }: CallScreenProps) {
   const [isCalling, setIsCalling] = useState(false);
+  const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
 
   const makeCall = async () => {
     setIsCalling(true);
+    
+    await frequencyTracker.loadRecords();
+    
+    if (!frequencyTracker.canCommunicate(contact, 'call')) {
+      await frequencyTracker.storeBlockedCall(contact.id);
+      
+      // Ring briefly (1.5 seconds) then show completed - simulates busy line
+      setTimeout(() => {
+        setIsCalling(false);
+        Alert.alert('Call Completed', `Your call with ${contact.name} was completed.`);
+      }, 1500);
+      return;
+    }
+    
     try {
+      await frequencyTracker.recordCommunication(contact.id, 'call');
+      
       const phoneUrl = `tel:${contact.phoneNumber}`;
       const canOpen = await Linking.canOpenURL(phoneUrl);
       if (canOpen) {

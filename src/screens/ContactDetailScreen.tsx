@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import TwilioService from '../services/TwilioService';
 import { Contact } from '../types/Contact';
+import FrequencyTracker from '../services/FrequencyTracker';
 
 interface ContactDetailScreenProps {
   contact: Contact;
@@ -22,6 +23,7 @@ interface ContactDetailScreenProps {
 export default function ContactDetailScreen({ contact, onBack, onMessage }: ContactDetailScreenProps) {
   const [isCalling, setIsCalling] = useState(false);
   const [twilioConfigured, setTwilioConfigured] = useState(false);
+  const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
 
   useEffect(() => {
     checkTwilioConfig();
@@ -80,7 +82,26 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
 
   const makeCall = async () => {
     setIsCalling(true);
+    
     try {
+      // Load frequency records and check if call is allowed
+      await frequencyTracker.loadRecords();
+      
+      if (!frequencyTracker.canCommunicate(contact, 'call')) {
+        // Store blocked call for caregiver review
+        await frequencyTracker.storeBlockedCall(contact.id);
+        
+        // Ring briefly (1.5 seconds) then show completed - simulates busy line
+        setTimeout(() => {
+          setIsCalling(false);
+          Alert.alert('Call Completed', `Your call with ${contact.name} was completed.`);
+        }, 1500);
+        return;
+      }
+      
+      // Record the allowed communication
+      await frequencyTracker.recordCommunication(contact.id, 'call');
+      
       await TwilioService.makeCall(contact.phoneNumber);
       Alert.alert(
         'Call Started Successfully! ✅', 
