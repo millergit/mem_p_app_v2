@@ -227,8 +227,8 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   };
 
   const testNotification = async () => {
-    if (!caregiverSettings?.phoneNumber && !caregiverSettings?.email) {
-      Alert.alert('No Contact Info', 'Please add a phone number or email address first.');
+    if (!caregiverSettings?.phoneNumber) {
+      Alert.alert('No Contact Info', 'Please add a phone number first.');
       return;
     }
 
@@ -833,54 +833,6 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
                       )}
                     </View>
 
-                    <View style={styles.settingItem}>
-                      <Text style={styles.settingTitle}>📧 Email Alerts</Text>
-                      
-                      <View style={styles.toggleContainer}>
-                        <TouchableOpacity
-                          style={[styles.toggleButton, !caregiverSettings.emailEnabled && styles.toggleButtonActive]}
-                          onPress={() => updateCaregiverSettings({
-                            ...caregiverSettings,
-                            emailEnabled: false
-                          })}
-                        >
-                          <Text style={[styles.toggleText, !caregiverSettings.emailEnabled && styles.toggleTextActive]}>
-                            OFF
-                          </Text>
-                        </TouchableOpacity>
-                        
-                        <TouchableOpacity
-                          style={[styles.toggleButton, caregiverSettings.emailEnabled && styles.toggleButtonActive]}
-                          onPress={() => updateCaregiverSettings({
-                            ...caregiverSettings,
-                            emailEnabled: true
-                          })}
-                        >
-                          <Text style={[styles.toggleText, caregiverSettings.emailEnabled && styles.toggleTextActive]}>
-                            ON
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {caregiverSettings.emailEnabled && (
-                        <View style={styles.inputContainer}>
-                          <Text style={styles.label}>Caregiver Email</Text>
-                          <TextInput
-                            style={styles.input}
-                            value={caregiverSettings.email || ''}
-                            onChangeText={(text) => updateCaregiverSettings({
-                              ...caregiverSettings,
-                              email: text
-                            })}
-                            placeholder="caregiver@example.com"
-                            placeholderTextColor="#666"
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                          />
-                        </View>
-                      )}
-                    </View>
 
                     <TouchableOpacity 
                       style={[styles.saveButton, { backgroundColor: '#FF9800', marginTop: 20 }]} 

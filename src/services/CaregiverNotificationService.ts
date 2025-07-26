@@ -5,10 +5,8 @@ import FrequencyTracker, { BlockedMessage, BlockedCall } from './FrequencyTracke
 
 interface CaregiverSettings {
   phoneNumber?: string;
-  email?: string;
   notificationsEnabled: boolean;
   smsEnabled: boolean;
-  emailEnabled: boolean;
   alertThreshold: number; // Number of blocked communications before alert
 }
 
@@ -52,7 +50,6 @@ class CaregiverNotificationService {
     return {
       notificationsEnabled: false,
       smsEnabled: true,
-      emailEnabled: false,
       alertThreshold: 5, // Alert after 5 blocked communications in a day
     };
   }
@@ -100,10 +97,6 @@ class CaregiverNotificationService {
     if (this.settings?.smsEnabled && this.settings?.phoneNumber) {
       await this.sendSMSAlert(alertMessage);
     }
-
-    if (this.settings?.emailEnabled && this.settings?.email) {
-      await this.sendEmailAlert(alertMessage);
-    }
   }
 
   private async sendSMSAlert(message: string): Promise<void> {
@@ -127,30 +120,6 @@ class CaregiverNotificationService {
     }
   }
 
-  private async sendEmailAlert(message: string): Promise<void> {
-    try {
-      if (!this.settings?.email) {
-        console.warn('No caregiver email configured for email alerts');
-        return;
-      }
-
-      // Use mailto link to open default email app
-      const subject = 'Dementia Care Alert';
-      const body = `${message}\n\nPlease open the app to review blocked communications.\n\nSent from Dementia Care App`;
-      
-      const emailUrl = `mailto:${this.settings.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      
-      const canOpen = await Linking.canOpenURL(emailUrl);
-      if (canOpen) {
-        await Linking.openURL(emailUrl);
-        console.log('Email alert opened');
-      } else {
-        console.warn('Cannot open email app');
-      }
-    } catch (error) {
-      console.error('Failed to send email alert:', error);
-    }
-  }
 
   // Call this method whenever a communication is blocked
   async onCommunicationBlocked(): Promise<void> {
@@ -188,7 +157,7 @@ class CaregiverNotificationService {
     // This could integrate with:
     // - iCloud (iOS) or Google Drive (Android) for file sync
     // - Firebase Firestore for real-time sync
-    // - Email the data as JSON attachment
+    // - Send data via SMS as backup option
     
     try {
       const frequencyTracker = FrequencyTracker.getInstance();
@@ -204,18 +173,10 @@ class CaregiverNotificationService {
         totalCount: blockedMessages.length + blockedCalls.length,
       };
 
-      // For now, email the data as JSON
-      if (this.settings?.email) {
-        const subject = 'Dementia Care - Blocked Communications Data';
-        const body = `Blocked Communications Data Export\n\nData:\n${JSON.stringify(syncData, null, 2)}`;
-        
-        const emailUrl = `mailto:${this.settings.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        
-        const canOpen = await Linking.canOpenURL(emailUrl);
-        if (canOpen) {
-          await Linking.openURL(emailUrl);
-        }
-      }
+      // For now, just log the data for caregiver review
+      console.log('Blocked Communications Data Export:', syncData);
+      
+      // Future implementation could save to device storage or send via other means
     } catch (error) {
       console.error('Failed to sync data to cloud:', error);
     }

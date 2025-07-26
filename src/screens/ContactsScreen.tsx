@@ -18,7 +18,7 @@ const sampleContacts: Contact[] = [
   },
   {
     id: '2',
-    name: 'Sarah',
+    name: 'Joe',
     phoneNumber: '+1987654321',
     birthdate: 'June 22, 1978',
   },
@@ -30,9 +30,15 @@ const sampleContacts: Contact[] = [
   },
   {
     id: '4',
-    name: 'Emma',
+    name: 'Marylou',
     phoneNumber: '+1444987654',
     birthdate: 'September 3, 1989',
+  },
+    {
+    id: '5',
+    name: 'Jenny',
+    phoneNumber: '+1444987654',
+    birthdate: 'September 3, 1975',
   },
 ];
 
