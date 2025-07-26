@@ -1,14 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, FlatList } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, SafeAreaView, FlatList } from 'react-native';
 import ContactCard from '../components/ContactCard';
-import SimpleAppTile from '../components/SimpleAppTile';
 import { Contact } from '../types/Contact';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ContactsScreenProps {
   onContactPress: (contact: Contact) => void;
-  onPhotosPress: () => void;
-  onCameraPress: () => void;
-  onSettingsPress: () => void;
+  onPinEntryPress: () => void;
 }
 
 const sampleContacts: Contact[] = [
@@ -38,56 +36,45 @@ const sampleContacts: Contact[] = [
   },
 ];
 
-type GridItem = Contact | { type: 'app'; id: string; title: string; icon: string; backgroundColor: string; onPress: () => void };
+export default function ContactsScreen({ onContactPress, onPinEntryPress }: ContactsScreenProps) {
+  const [contacts, setContacts] = useState<Contact[]>(sampleContacts);
 
-export default function ContactsScreen({ onContactPress, onPhotosPress, onCameraPress, onSettingsPress }: ContactsScreenProps) {
-  const gridData: GridItem[] = [
-    ...sampleContacts,
-    {
-      type: 'app',
-      id: 'photos',
-      title: 'Photos',
-      icon: '📷',
-      backgroundColor: '#FF6B35',
-      onPress: onPhotosPress,
-    },
-    {
-      type: 'app',
-      id: 'camera',
-      title: 'Camera',
-      icon: '📸',
-      backgroundColor: '#4A90E2',
-      onPress: onCameraPress,
-    },
-    {
-      type: 'app',
-      id: 'settings',
-      title: 'Settings',
-      icon: '⚙️',
-      backgroundColor: '#9C27B0',
-      onPress: onSettingsPress,
-    },
-  ];
+  useEffect(() => {
+    loadSelectedContacts();
+  }, []);
 
-  const renderItem = ({ item }: { item: GridItem }) => {
-    if ('type' in item && item.type === 'app') {
-      return (
-        <SimpleAppTile
-          title={item.title}
-          icon={item.icon}
-          backgroundColor={item.backgroundColor}
-          onPress={item.onPress}
-        />
-      );
+  const loadSelectedContacts = async () => {
+    try {
+      const contactsString = await AsyncStorage.getItem('selected_contacts');
+      if (contactsString) {
+        const selectedContacts = JSON.parse(contactsString);
+        if (selectedContacts.length > 0) {
+          setContacts(selectedContacts);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load selected contacts:', error);
+      // Keep using sample contacts if loading fails
     }
-    return <ContactCard contact={item as Contact} onPress={onContactPress} />;
   };
+
+  const handleContactPress = (contact: Contact) => {
+    onContactPress(contact);
+  };
+
+  const renderContact = ({ item, index }: { item: Contact; index: number }) => (
+    <ContactCard 
+      contact={item} 
+      onPress={handleContactPress}
+      onLongPress={index === 0 ? onPinEntryPress : undefined} // First contact triggers PIN
+    />
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
-        data={gridData}
-        renderItem={renderItem}
+        data={contacts}
+        renderItem={renderContact}
         keyExtractor={(item) => item.id}
         numColumns={2}
         showsVerticalScrollIndicator={false}
@@ -104,5 +91,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 8,
+    paddingBottom: 120, // Extra padding for assistive access back button
   },
 });

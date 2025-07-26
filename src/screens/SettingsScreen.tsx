@@ -12,6 +12,9 @@ import {
   Platform,
 } from 'react-native';
 import TwilioService, { TwilioConfig } from '../services/TwilioService';
+import ContactSelector from '../components/ContactSelector';
+import { Contact } from '../types/Contact';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -22,9 +25,12 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [authToken, setAuthToken] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [saving, setSaving] = useState(false);
+  const [currentTab, setCurrentTab] = useState<'twilio' | 'contacts'>('twilio');
+  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
 
   useEffect(() => {
     loadExistingConfig();
+    loadSelectedContacts();
   }, []);
 
   const loadExistingConfig = async () => {
@@ -33,6 +39,28 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       setAccountSid(config.accountSid);
       setAuthToken(config.authToken);
       setPhoneNumber(config.phoneNumber);
+    }
+  };
+
+  const loadSelectedContacts = async () => {
+    try {
+      const contactsString = await AsyncStorage.getItem('selected_contacts');
+      if (contactsString) {
+        const contacts = JSON.parse(contactsString);
+        setSelectedContacts(contacts);
+      }
+    } catch (error) {
+      console.error('Failed to load selected contacts:', error);
+    }
+  };
+
+  const saveSelectedContacts = async (contacts: Contact[]) => {
+    try {
+      await AsyncStorage.setItem('selected_contacts', JSON.stringify(contacts));
+      setSelectedContacts(contacts);
+      Alert.alert('Success', 'Selected contacts saved successfully!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save selected contacts');
     }
   };
 
@@ -88,78 +116,103 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Twilio Settings</Text>
+        <Text style={styles.title}>Settings</Text>
       </View>
 
-      <KeyboardAvoidingView 
-        style={styles.content} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>📱 Setup Instructions</Text>
-            <Text style={styles.infoText}>
-              1. Sign up at twilio.com{'\n'}
-              2. Buy a phone number{'\n'}
-              3. Get your Account SID and Auth Token{'\n'}
-              4. Enter them below
-            </Text>
-          </View>
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, currentTab === 'twilio' && styles.activeTab]}
+          onPress={() => setCurrentTab('twilio')}
+        >
+          <Text style={[styles.tabText, currentTab === 'twilio' && styles.activeTabText]}>
+            Twilio
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, currentTab === 'contacts' && styles.activeTab]}
+          onPress={() => setCurrentTab('contacts')}
+        >
+          <Text style={[styles.tabText, currentTab === 'contacts' && styles.activeTabText]}>
+            Contacts
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-          <View style={styles.form}>
-            <Text style={styles.label}>Account SID</Text>
-            <TextInput
-              style={styles.input}
-              value={accountSid}
-              onChangeText={setAccountSid}
-              placeholder="AC1234567890abcdef..."
-              placeholderTextColor="#666"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <Text style={styles.label}>Auth Token</Text>
-            <TextInput
-              style={styles.input}
-              value={authToken}
-              onChangeText={setAuthToken}
-              placeholder="your_auth_token"
-              placeholderTextColor="#666"
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <Text style={styles.label}>Your Twilio Phone Number</Text>
-            <TextInput
-              style={styles.input}
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              placeholder="+15551234567"
-              placeholderTextColor="#666"
-              keyboardType="phone-pad"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
-              onPress={saveConfig}
-              disabled={saving}
-            >
-              <Text style={styles.saveButtonText}>
-                {saving ? 'Saving...' : '💾 Save Settings'}
+      <View style={styles.content}>
+        {currentTab === 'twilio' ? (
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.tabContent}>
+            <View style={styles.infoBox}>
+              <Text style={styles.infoTitle}>📱 Setup Instructions</Text>
+              <Text style={styles.infoText}>
+                1. Sign up at twilio.com{'\n'}
+                2. Buy a phone number{'\n'}
+                3. Get your Account SID and Auth Token{'\n'}
+                4. Enter them below
               </Text>
-            </TouchableOpacity>
+            </View>
 
-            <TouchableOpacity style={styles.clearButton} onPress={clearConfig}>
-              <Text style={styles.clearButtonText}>🗑️ Clear Settings</Text>
-            </TouchableOpacity>
+            <View style={styles.form}>
+              <Text style={styles.label}>Account SID</Text>
+              <TextInput
+                style={styles.input}
+                value={accountSid}
+                onChangeText={setAccountSid}
+                placeholder="AC1234567890abcdef..."
+                placeholderTextColor="#666"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <Text style={styles.label}>Auth Token</Text>
+              <TextInput
+                style={styles.input}
+                value={authToken}
+                onChangeText={setAuthToken}
+                placeholder="your_auth_token"
+                placeholderTextColor="#666"
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <Text style={styles.label}>Your Twilio Phone Number</Text>
+              <TextInput
+                style={styles.input}
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                placeholder="+15551234567"
+                placeholderTextColor="#666"
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity 
+                style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
+                onPress={saveConfig}
+                disabled={saving}
+              >
+                <Text style={styles.saveButtonText}>
+                  {saving ? 'Saving...' : '💾 Save Settings'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.clearButton} onPress={clearConfig}>
+                <Text style={styles.clearButtonText}>🗑️ Clear Settings</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        ) : (
+          <View style={styles.tabContent}>
+            <ContactSelector
+              selectedContacts={selectedContacts}
+              onContactsChange={saveSelectedContacts}
+            />
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        )}
+      </View>
     </SafeAreaView>
   );
 }
@@ -195,16 +248,45 @@ const styles = StyleSheet.create({
     color: '#fff',
     flex: 1,
   },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#1a1a1a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: '#4CAF50',
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  activeTabText: {
+    color: '#4CAF50',
+  },
   content: {
     flex: 1,
   },
+  tabContent: {
+    flex: 1,
+    padding: 20,
+    paddingBottom: 140, // Space for assistive access button
+  },
   infoBox: {
     backgroundColor: '#1a1a1a',
-    margin: 20,
     padding: 20,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#333',
+    marginBottom: 20,
   },
   infoTitle: {
     fontSize: 20,
@@ -218,7 +300,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   form: {
-    paddingHorizontal: 20,
+    marginBottom: 20,
   },
   label: {
     fontSize: 18,
@@ -238,8 +320,8 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   buttonContainer: {
-    padding: 20,
     gap: 16,
+    marginTop: 20,
   },
   saveButton: {
     backgroundColor: '#4CAF50',

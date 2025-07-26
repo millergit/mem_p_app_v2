@@ -5,11 +5,16 @@ import { Contact } from '../types/Contact';
 interface ContactCardProps {
   contact: Contact;
   onPress: (contact: Contact) => void;
+  onLongPress?: () => void;
 }
 
-export default function ContactCard({ contact, onPress }: ContactCardProps) {
+export default function ContactCard({ contact, onPress, onLongPress }: ContactCardProps) {
   return (
-    <TouchableOpacity style={styles.card} onPress={() => onPress(contact)}>
+    <TouchableOpacity 
+      style={styles.card} 
+      onPress={() => onPress(contact)}
+      onLongPress={onLongPress}
+    >
       <View style={styles.contactInfo}>
         {contact.photoUri ? (
           <Image source={{ uri: contact.photoUri }} style={styles.photo} />

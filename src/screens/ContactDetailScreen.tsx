@@ -6,7 +6,8 @@ import {
   StyleSheet, 
   SafeAreaView, 
   Image,
-  Alert
+  Alert,
+  ScrollView
 } from 'react-native';
 import TwilioService from '../services/TwilioService';
 import { Contact } from '../types/Contact';
@@ -70,7 +71,11 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
         </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.contactInfo}>
           {contact.photoUri ? (
             <Image source={{ uri: contact.photoUri }} style={styles.photo} />
@@ -101,7 +106,7 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
             <Text style={styles.buttonText}>💬 Text {contact.name}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -130,61 +135,65 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: 16,
+    paddingBottom: 140, // Space for assistive access button
   },
   contactInfo: {
     alignItems: 'center',
-    marginBottom: 60,
+    marginBottom: 40,
   },
   photo: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    marginBottom: 24,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginBottom: 16,
   },
   photoPlaceholder: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: '#333',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   photoPlaceholderText: {
-    fontSize: 50,
+    fontSize: 40,
     fontWeight: 'bold',
     color: '#fff',
   },
   name: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
     textAlign: 'center',
-    marginBottom: 12,
-  },
-  phoneNumber: {
-    fontSize: 24,
-    color: '#ccc',
-    textAlign: 'center',
     marginBottom: 8,
   },
-  birthdate: {
+  phoneNumber: {
     fontSize: 20,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  birthdate: {
+    fontSize: 18,
     color: '#999',
     textAlign: 'center',
   },
   buttonContainer: {
-    gap: 20,
+    gap: 16,
   },
   button: {
-    paddingVertical: 24,
-    paddingHorizontal: 32,
+    paddingVertical: 20,
+    paddingHorizontal: 24,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 80,
+    minHeight: 70,
   },
   callButton: {
     backgroundColor: '#4CAF50',
@@ -197,7 +206,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
   },
 });

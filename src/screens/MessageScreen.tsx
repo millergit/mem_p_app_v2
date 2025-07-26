@@ -8,7 +8,10 @@ import {
   SafeAreaView, 
   Alert,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
+  ScrollView
 } from 'react-native';
 import TwilioService from '../services/TwilioService';
 import { Contact } from '../types/Contact';
@@ -77,33 +80,42 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
       </View>
 
       <KeyboardAvoidingView 
-        style={styles.content} 
+        style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <View style={styles.messageContainer}>
-          <Text style={styles.label}>Your Message:</Text>
-          <TextInput
-            style={styles.textInput}
-            multiline
-            numberOfLines={6}
-            value={message}
-            onChangeText={setMessage}
-            placeholder="Type your message here..."
-            placeholderTextColor="#666"
-            textAlignVertical="top"
-            autoFocus
-          />
-        </View>
-
-        <TouchableOpacity 
-          style={[styles.sendButton, isSending && styles.sendButtonDisabled]} 
-          onPress={sendMessage}
-          disabled={isSending}
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.sendButtonText}>
-            {isSending ? 'Sending...' : `📱 Send to ${contact.name}`}
-          </Text>
-        </TouchableOpacity>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.content}>
+              <Text style={styles.label}>Your Message:</Text>
+              <TextInput
+                style={styles.textInput}
+                multiline
+                value={message}
+                onChangeText={setMessage}
+                placeholder="Type your message here..."
+                placeholderTextColor="#666"
+                textAlignVertical="top"
+                autoFocus
+                scrollEnabled={true}
+              />
+              
+              <TouchableOpacity 
+                style={[styles.sendButton, isSending && styles.sendButtonDisabled]} 
+                onPress={sendMessage}
+                disabled={isSending}
+              >
+                <Text style={styles.sendButtonText}>
+                  {isSending ? 'Sending...' : `📱 Send to ${contact.name}`}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -117,8 +129,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
     paddingHorizontal: 20,
     backgroundColor: '#1a1a1a',
     borderBottomWidth: 1,
@@ -130,55 +142,62 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   backButtonText: {
-    fontSize: 24,
+    fontSize: 20,
     color: '#2196F3',
     fontWeight: 'bold',
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#fff',
     flex: 1,
+  },
+  keyboardContainer: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
-    flex: 1,
     padding: 20,
-  },
-  messageContainer: {
-    flex: 1,
-    marginBottom: 20,
+    minHeight: '100%',
   },
   label: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   textInput: {
     backgroundColor: '#1a1a1a',
     borderRadius: 16,
-    padding: 20,
-    fontSize: 20,
+    padding: 16,
+    fontSize: 18,
     color: '#fff',
     borderWidth: 2,
     borderColor: '#333',
-    minHeight: 200,
+    height: 120,
+    marginBottom: 20,
   },
   sendButton: {
     backgroundColor: '#4CAF50',
-    paddingVertical: 24,
-    paddingHorizontal: 32,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    minHeight: 60,
   },
   sendButtonDisabled: {
     backgroundColor: '#666',
   },
   sendButtonText: {
     color: '#fff',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
