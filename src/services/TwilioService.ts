@@ -169,7 +169,7 @@ class TwilioService {
           body: new URLSearchParams({
             From: this.config.phoneNumber,
             To: to,
-            Url: 'http://demo.twilio.com/docs/voice.xml', // Simple connection TwiML
+            Twiml: `<Response><Dial>${to}</Dial></Response>`,
           }).toString(),
         }
       );
