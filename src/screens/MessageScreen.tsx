@@ -266,7 +266,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
       <KeyboardAvoidingView 
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 20}
       >
         {showConversations && (
           <View style={styles.messagesContainer}>
@@ -307,7 +307,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
         )}
 
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.inputSection}>
+          <View style={[styles.inputSection, { paddingBottom: Math.max(16, insets.bottom) }]}>
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.textInput}
@@ -318,6 +318,8 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
                 placeholderTextColor="#666"
                 textAlignVertical="top"
                 maxLength={1600}
+                autoCorrect={false}
+                spellCheck={false}
               />
             </View>
             
