@@ -10,6 +10,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from 'react-native';
 import TwilioService, { TwilioConfig } from '../services/TwilioService';
 import ContactSelector from '../components/ContactSelector';
@@ -33,7 +34,20 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     loadExistingConfig();
     loadSelectedContacts();
     loadDisplaySettings();
-  }, []);
+    
+    // iOS Assistive Access back button handling
+    const onBackPress = () => {
+      // Navigate back within the app instead of exiting
+      onBack();
+      return true; // Prevent default behavior (exiting app)
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    
+    return () => {
+      backHandler.remove();
+    };
+  }, [onBack]);
 
   const loadExistingConfig = async () => {
     const config = await TwilioService.loadConfig();
@@ -139,8 +153,26 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     );
   };
 
+  const accessibilityActions = [
+    { name: 'activate', label: 'go back' },
+    { name: 'escape', label: 'go back' },
+  ];
+
+  const onAccessibilityAction = (event: any) => {
+    switch (event.nativeEvent.actionName) {
+      case 'activate':
+      case 'escape':
+        onBack();
+        break;
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView 
+      style={styles.container}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
+    >
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backButtonText}>← Back</Text>

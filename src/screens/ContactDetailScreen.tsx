@@ -7,7 +7,8 @@ import {
   SafeAreaView, 
   Image,
   Alert,
-  ScrollView
+  ScrollView,
+  BackHandler
 } from 'react-native';
 import TwilioService from '../services/TwilioService';
 import { Contact } from '../types/Contact';
@@ -24,7 +25,20 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
 
   useEffect(() => {
     checkTwilioConfig();
-  }, []);
+    
+    // iOS Assistive Access back button handling
+    const onBackPress = () => {
+      // Navigate back within the app instead of exiting
+      onBack();
+      return true; // Prevent default behavior (exiting app)
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    
+    return () => {
+      backHandler.remove();
+    };
+  }, [onBack]);
 
   const checkTwilioConfig = async () => {
     await TwilioService.loadConfig();
@@ -44,16 +58,46 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
       return;
     }
 
+    // Show confirmation dialog before calling
+    Alert.alert(
+      'Make Phone Call? 📞',
+      `Do you want to call ${contact.name}?\n\nPhone: ${contact.phoneNumber}\n\nYou will receive a call on your phone that connects you to ${contact.name}.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => {}
+        },
+        {
+          text: 'Yes, Call Now',
+          style: 'default',
+          onPress: () => makeCall()
+        }
+      ],
+      { cancelable: false }
+    );
+  };
+
+  const makeCall = async () => {
     setIsCalling(true);
     try {
       await TwilioService.makeCall(contact.phoneNumber);
       Alert.alert(
-        'Call Started!', 
-        `Calling ${contact.name} via Twilio. You should receive a call shortly.`,
-        [{ text: 'OK', onPress: onBack }]
+        'Call Started Successfully! ✅', 
+        `Your call to ${contact.name} has been started.\n\nPhone: ${contact.phoneNumber}\n\nYou should receive a call on your phone shortly.`,
+        [{ 
+          text: 'OK', 
+          style: 'default',
+          onPress: onBack 
+        }],
+        { cancelable: false }
       );
     } catch (error: any) {
-      Alert.alert('Call Failed', error.message || 'Failed to make call. Please try again.');
+      Alert.alert(
+        'Call Not Completed', 
+        `Could not call ${contact.name}.\n\nPlease try again or ask for help.`,
+        [{ text: 'OK', style: 'default' }]
+      );
     } finally {
       setIsCalling(false);
     }
@@ -63,8 +107,26 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
     onMessage(contact);
   };
 
+  const accessibilityActions = [
+    { name: 'activate', label: 'go back' },
+    { name: 'escape', label: 'go back' },
+  ];
+
+  const onAccessibilityAction = (event: any) => {
+    switch (event.nativeEvent.actionName) {
+      case 'activate':
+      case 'escape':
+        onBack();
+        break;
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView 
+      style={styles.container}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
+    >
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backButtonText}>← Back</Text>

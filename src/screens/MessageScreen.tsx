@@ -46,7 +46,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
       clearInterval(interval);
       TwilioService.stopMessagePolling();
     };
-  }, [contact.phoneNumber]);
+  }, [contact.phoneNumber, onBack]);
 
   const loadDisplaySettings = async () => {
     try {
@@ -98,6 +98,49 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
       return;
     }
 
+    // Show confirmation dialog before sending
+    Alert.alert(
+      'Send Text Message? 💬',
+      `Do you want to send this message to ${contact.name}?\n\nPhone: ${contact.phoneNumber}\n\nYour message:\n"${message.trim()}"`,
+      [
+        {
+          text: 'Cancel',
+          style: 'default',
+          onPress: () => {
+            // Do absolutely nothing - just for testing
+          }
+        },
+        {
+          text: 'Yes, Send Message',
+          style: 'default',
+          onPress: () => sendTextMessage()
+        }
+      ],
+      { cancelable: false }
+    );
+  };
+
+  const showCancelDialog = () => {
+    Alert.alert(
+      'Go Back? 🔙',
+      `Do you want to go back to contacts?\n\nYour message will not be saved.`,
+      [
+        {
+          text: 'Stay Here',
+          style: 'cancel',
+          onPress: () => {}
+        },
+        {
+          text: 'Yes, Go Back',
+          style: 'default',
+          onPress: () => onBack()
+        }
+      ],
+      { cancelable: false }
+    );
+  };
+
+  const sendTextMessage = async () => {
     setIsSending(true);
     try {
       // Add a small delay to show loading state
@@ -130,7 +173,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
       
     } catch (error: any) {
       Alert.alert(
-        'Message Failed ❌', 
+        'Message Not Sent', 
         `Could not send your message to ${contact.name}.\n\nPlease try again or ask for help.`,
         [{ text: 'OK', style: 'default' }]
       );
@@ -231,7 +274,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
             <View style={styles.buttonRow}>
               <TouchableOpacity 
                 style={styles.cancelButton} 
-                onPress={onBack}
+                onPress={showCancelDialog}
               >
                 <Text style={styles.cancelButtonText}>
                   Cancel
