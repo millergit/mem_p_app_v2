@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Test Icon</title>
+</head>
+<body>
+    <canvas id="iconCanvas" width="1024" height="1024"></canvas>
+    <br>
+    <button onclick="downloadIcon()">Download Icon</button>
+    
+    <script>
+        const canvas = document.getElementById('iconCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Create a blue background circle
+        ctx.fillStyle = '#4A90E2';
+        ctx.beginPath();
+        ctx.arc(512, 512, 512, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Add white person silhouette
+        ctx.fillStyle = 'white';
+        // Head
+        ctx.beginPath();
+        ctx.arc(512, 350, 80, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Body
+        ctx.beginPath();
+        ctx.roundRect(432, 450, 160, 200, 20);
+        ctx.fill();
+        
+        function downloadIcon() {
+            const link = document.createElement('a');
+            link.download = 'icon.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+    </script>
+</body>
+</html>

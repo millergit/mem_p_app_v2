@@ -47,6 +47,8 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
       loadMessages();
       loadDisplaySettings();
       TwilioService.startMessagePolling();
+      // Set fast polling when viewing this conversation
+      TwilioService.setPollingMode('conversation');
     }, 100);
     
     // Set up polling to refresh messages periodically
@@ -55,7 +57,8 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
     return () => {
       clearTimeout(initTimer);
       clearInterval(interval);
-      TwilioService.stopMessagePolling();
+      // Reset to normal polling when leaving conversation
+      TwilioService.setPollingMode('active');
     };
   }, [contact.phoneNumber, onBack]);
 

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Blue Square Icon</title>
+</head>
+<body>
+    <canvas id="iconCanvas" width="1024" height="1024"></canvas>
+    <br>
+    <button onclick="downloadIcon()">Download Blue Square Icon</button>
+    
+    <script>
+        const canvas = document.getElementById('iconCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Create a solid blue square
+        ctx.fillStyle = '#4A90E2';
+        ctx.fillRect(0, 0, 1024, 1024);
+        
+        // Draw classic "people" icon - three overlapping circles
+        ctx.fillStyle = 'white';
+        
+        // Person 1 (back left)
+        drawSimplePerson(400, 450, 0.8);
+        
+        // Person 2 (front center) 
+        drawSimplePerson(512, 420, 1.0);
+        
+        // Person 3 (back right)
+        drawSimplePerson(624, 460, 0.85);
+        
+        function drawSimplePerson(x, y, scale) {
+            const headRadius = 80 * scale;
+            const bodyRadius = 120 * scale;
+            
+            // Head (smaller circle)
+            ctx.beginPath();
+            ctx.arc(x, y - 60 * scale, headRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Body (larger circle below)
+            ctx.beginPath();
+            ctx.arc(x, y + 80 * scale, bodyRadius, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+        
+        function downloadIcon() {
+            const link = document.createElement('a');
+            link.download = 'icon.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+    </script>
+</body>
+</html>

@@ -29,6 +29,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.memorycare.phone",
+      "icon": "./assets/icon.png",
       "infoPlist": {
         "NSContactsUsageDescription": "This app needs access to contacts to help you call and message your loved ones.",
         "NSMicrophoneUsageDescription": "This app needs microphone access to make phone calls.",

@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Animated, Dimensions, View } from 'react-native';
+import { Animated, Dimensions, View, AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ContactsScreen from './src/screens/ContactsScreen';
 import ContactDetailScreen from './src/screens/ContactDetailScreen';
 import MessageScreen from './src/screens/MessageScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PinEntryModal from './src/components/PinEntryModal';
+import TwilioService from './src/services/TwilioService';
 import { Contact } from './src/types/Contact';
 
 type Screen = 'contacts' | 'detail' | 'message' | 'settings';
@@ -23,6 +24,19 @@ export default function App() {
   const [currentOpacity] = useState(new Animated.Value(1));
   const [nextOpacity, setNextOpacity] = useState<Animated.Value | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: string) => {
+      if (nextAppState === 'active') {
+        TwilioService.setPollingMode('active');
+      } else if (nextAppState === 'background') {
+        TwilioService.setPollingMode('background');
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, []);
 
   const animateToScreen = (newScreen: Screen, isBackNavigation = false) => {
     if (isAnimating) return;

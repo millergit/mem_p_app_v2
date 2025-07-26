@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Communication Icon</title>
+</head>
+<body>
+    <canvas id="iconCanvas" width="1024" height="1024"></canvas>
+    <br>
+    <button onclick="downloadIcon()">Download Communication Icon</button>
+    
+    <script>
+        const canvas = document.getElementById('iconCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Create a gradient background circle
+        const gradient = ctx.createRadialGradient(512, 512, 0, 512, 512, 512);
+        gradient.addColorStop(0, '#4A90E2');
+        gradient.addColorStop(1, '#2563EB');
+        
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(512, 512, 512, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Phone icon (left side)
+        ctx.fillStyle = 'white';
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 12;
+        
+        // Phone body
+        ctx.beginPath();
+        ctx.roundRect(280, 300, 120, 200, 25);
+        ctx.fill();
+        
+        // Phone screen
+        ctx.fillStyle = '#2563EB';
+        ctx.beginPath();
+        ctx.roundRect(295, 320, 90, 120, 10);
+        ctx.fill();
+        
+        // Phone speaker
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.roundRect(315, 310, 50, 8, 4);
+        ctx.fill();
+        
+        // Phone button
+        ctx.beginPath();
+        ctx.arc(350, 470, 15, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Message bubble (right side)
+        ctx.fillStyle = 'white';
+        
+        // Main bubble
+        ctx.beginPath();
+        ctx.roundRect(550, 320, 180, 120, 25);
+        ctx.fill();
+        
+        // Bubble tail
+        ctx.beginPath();
+        ctx.moveTo(550, 400);
+        ctx.lineTo(520, 420);
+        ctx.lineTo(550, 440);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Message lines
+        ctx.fillStyle = '#2563EB';
+        ctx.beginPath();
+        ctx.roundRect(570, 340, 120, 12, 6);
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.roundRect(570, 365, 90, 12, 6);
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.roundRect(570, 390, 140, 12, 6);
+        ctx.fill();
+        
+        // Connection lines between phone and message
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 8;
+        ctx.setLineDash([15, 10]);
+        
+        ctx.beginPath();
+        ctx.moveTo(420, 360);
+        ctx.lineTo(530, 360);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.moveTo(420, 390);
+        ctx.lineTo(530, 390);
+        ctx.stroke();
+        
+        function downloadIcon() {
+            const link = document.createElement('a');
+            link.download = 'communication-icon.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+    </script>
+</body>
+</html>

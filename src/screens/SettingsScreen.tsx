@@ -27,6 +27,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [accountSid, setAccountSid] = useState('');
   const [authToken, setAuthToken] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [userPhoneNumber, setUserPhoneNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [currentTab, setCurrentTab] = useState<'twilio' | 'contacts' | 'display' | 'communication' | 'caregiver'>('twilio');
   const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
@@ -64,6 +65,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       setAccountSid(config.accountSid);
       setAuthToken(config.authToken);
       setPhoneNumber(config.phoneNumber);
+      setUserPhoneNumber(config.userPhoneNumber || '');
     }
   };
 
@@ -274,8 +276,8 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   };
 
   const saveConfig = async () => {
-    if (!accountSid.trim() || !authToken.trim() || !phoneNumber.trim()) {
-      Alert.alert('Missing Information', 'Please fill in all fields');
+    if (!accountSid.trim() || !authToken.trim() || !phoneNumber.trim() || !userPhoneNumber.trim()) {
+      Alert.alert('Missing Information', 'Please fill in all fields including your phone number');
       return;
     }
 
@@ -285,6 +287,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
         accountSid: accountSid.trim(),
         authToken: authToken.trim(),
         phoneNumber: phoneNumber.trim(),
+        userPhoneNumber: userPhoneNumber.trim(),
       };
 
       await TwilioService.saveConfig(config);
@@ -312,6 +315,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
             setAccountSid('');
             setAuthToken('');
             setPhoneNumber('');
+            setUserPhoneNumber('');
             Alert.alert('Cleared', 'Twilio settings have been cleared.');
           },
         },
@@ -437,6 +441,21 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
                 autoCapitalize="none"
                 autoCorrect={false}
               />
+
+              <Text style={styles.label}>Your Actual Phone Number</Text>
+              <TextInput
+                style={styles.input}
+                value={userPhoneNumber}
+                onChangeText={setUserPhoneNumber}
+                placeholder="+15551234567"
+                placeholderTextColor="#666"
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Text style={styles.infoText}>
+                This is the phone number that contacts will be connected to when they answer calls.
+              </Text>
             </View>
 
             <View style={styles.buttonContainer}>

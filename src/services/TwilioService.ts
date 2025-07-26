@@ -4,12 +4,15 @@ import MessageService from './MessageService';
 export interface TwilioConfig {
   accountSid: string;
   authToken: string;
-  phoneNumber: string;
+  phoneNumber: string; // Twilio number
+  userPhoneNumber: string; // Your dad's actual phone number
 }
 
 class TwilioService {
   private config: TwilioConfig | null = null;
   private pollingInterval: NodeJS.Timeout | null = null;
+  private pollingMode: 'active' | 'background' | 'conversation' = 'background';
+  private appState: 'active' | 'background' = 'active';
 
   async loadConfig(): Promise<TwilioConfig | null> {
     try {
@@ -94,10 +97,10 @@ class TwilioService {
 
     try {
       const auth = btoa(`${this.config.accountSid}:${this.config.authToken}`);
-      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       
       const response = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${this.config.accountSid}/Messages.json?DateSent>=${thirtyMinutesAgo}&To=${this.config.phoneNumber}`,
+        `https://api.twilio.com/2010-04-01/Accounts/${this.config.accountSid}/Messages.json?DateSent>=${twentyFourHoursAgo}&To=${this.config.phoneNumber}`,
         {
           headers: {
             'Authorization': `Basic ${auth}`,
@@ -127,19 +130,44 @@ class TwilioService {
     }
   }
 
+  private getPollingInterval(): number {
+    switch (this.pollingMode) {
+      case 'conversation': return 10000;  // 10 seconds when viewing messages
+      case 'active': return 30000;        // 30 seconds when app open
+      case 'background': return 120000;   // 2 minutes when backgrounded
+    }
+  }
+
+  private restartPolling(): void {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+    }
+    
+    this.pollingInterval = setInterval(() => {
+      this.fetchRecentMessages();
+    }, this.getPollingInterval());
+  }
+
   startMessagePolling(): void {
     if (this.pollingInterval) return;
     
     // Load conversations when starting
     MessageService.loadConversations();
     
-    // Poll for new messages every 30 seconds
-    this.pollingInterval = setInterval(() => {
-      this.fetchRecentMessages();
-    }, 30000);
+    // Start polling
+    this.restartPolling();
     
     // Fetch immediately
     this.fetchRecentMessages();
+  }
+
+  setPollingMode(mode: 'active' | 'background' | 'conversation'): void {
+    if (this.pollingMode !== mode) {
+      this.pollingMode = mode;
+      if (this.pollingInterval) {
+        this.restartPolling();
+      }
+    }
   }
 
   stopMessagePolling(): void {
@@ -154,10 +182,15 @@ class TwilioService {
       throw new Error('Twilio not configured. Please add your credentials in settings.');
     }
 
+    if (!this.config.userPhoneNumber) {
+      throw new Error('Your phone number not configured. Please add it in Twilio settings.');
+    }
+
     try {
       const auth = btoa(`${this.config.accountSid}:${this.config.authToken}`);
       
-      // Create a simple call that connects directly
+      // Simple approach: Call contact, when they answer, connect to user
+      // Both sides see Twilio number as caller ID
       const response = await fetch(
         `https://api.twilio.com/2010-04-01/Accounts/${this.config.accountSid}/Calls.json`,
         {
@@ -167,9 +200,10 @@ class TwilioService {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
           body: new URLSearchParams({
-            From: this.config.phoneNumber,
-            To: to,
-            Twiml: `<Response><Dial>${to}</Dial></Response>`,
+            From: this.config.phoneNumber, // Twilio number (what contact sees)
+            To: to, // Contact's number
+            // When contact answers, dial the user's phone
+            Twiml: `<Response><Dial>${this.config.userPhoneNumber}</Dial></Response>`,
           }).toString(),
         }
       );
