@@ -17,6 +17,7 @@ import ContactSelector from '../components/ContactSelector';
 import { Contact, ContactFrequencySettings } from '../types/Contact';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FrequencyTracker, { BlockedMessage, BlockedCall } from '../services/FrequencyTracker';
+import CaregiverNotificationService, { CaregiverSettings } from '../services/CaregiverNotificationService';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -27,18 +28,21 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [authToken, setAuthToken] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [saving, setSaving] = useState(false);
-  const [currentTab, setCurrentTab] = useState<'twilio' | 'contacts' | 'display' | 'communication'>('twilio');
+  const [currentTab, setCurrentTab] = useState<'twilio' | 'contacts' | 'display' | 'communication' | 'caregiver'>('twilio');
   const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
   const [showConversations, setShowConversations] = useState(true);
   const [blockedMessages, setBlockedMessages] = useState<BlockedMessage[]>([]);
   const [blockedCalls, setBlockedCalls] = useState<BlockedCall[]>([]);
   const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
+  const [caregiverNotifications] = useState(() => CaregiverNotificationService.getInstance());
+  const [caregiverSettings, setCaregiverSettings] = useState<CaregiverSettings | null>(null);
 
   useEffect(() => {
     loadExistingConfig();
     loadSelectedContacts();
     loadDisplaySettings();
     loadBlockedMessages();
+    loadCaregiverSettings();
     
     // iOS Assistive Access back button handling
     const onBackPress = () => {
@@ -96,6 +100,15 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     }
   };
 
+  const loadCaregiverSettings = async () => {
+    try {
+      const settings = await caregiverNotifications.loadSettings();
+      setCaregiverSettings(settings);
+    } catch (error) {
+      console.error('Failed to load caregiver settings:', error);
+    }
+  };
+
   const saveSelectedContacts = async (contacts: Contact[]) => {
     try {
       await AsyncStorage.setItem('selected_contacts', JSON.stringify(contacts));
@@ -138,7 +151,6 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       Alert.alert('No Blocked Communications', 'There are no blocked calls or messages to display.');
       return;
     }
-
     let alertMessage = '';
     
     if (blockedMessages.length > 0) {
@@ -201,6 +213,46 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
             Alert.alert('Cleared', 'All blocked communications have been cleared.');
           },
         },
+      ]
+    );
+  };
+
+  const updateCaregiverSettings = async (newSettings: CaregiverSettings) => {
+    try {
+      await caregiverNotifications.saveSettings(newSettings);
+      setCaregiverSettings(newSettings);
+    } catch (error) {
+      console.error('Failed to update caregiver settings:', error);
+    }
+  };
+
+  const testNotification = async () => {
+    if (!caregiverSettings?.phoneNumber && !caregiverSettings?.email) {
+      Alert.alert('No Contact Info', 'Please add a phone number or email address first.');
+      return;
+    }
+
+    Alert.alert(
+      'Test Notification',
+      'This will send a test alert to the caregiver contact.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Test',
+          onPress: async () => {
+            try {
+              // Force trigger an alert by simulating threshold
+              const testSettings = { ...caregiverSettings!, alertThreshold: 0 };
+              await caregiverNotifications.saveSettings(testSettings);
+              await caregiverNotifications.checkAndSendAlerts();
+              await caregiverNotifications.saveSettings(caregiverSettings!);
+              
+              Alert.alert('Test Sent', 'Test notification has been sent to the caregiver.');
+            } catch (error) {
+              Alert.alert('Test Failed', 'Could not send test notification.');
+            }
+          }
+        }
       ]
     );
   };
@@ -325,6 +377,14 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
         >
           <Text style={[styles.tabText, currentTab === 'communication' && styles.activeTabText]}>
             Limits
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, currentTab === 'caregiver' && styles.activeTab]}
+          onPress={() => setCurrentTab('caregiver')}
+        >
+          <Text style={[styles.tabText, currentTab === 'caregiver' && styles.activeTabText]}>
+            Alerts
           </Text>
         </TouchableOpacity>
       </View>
@@ -646,6 +706,193 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
               );
             })}
           </ScrollView>
+        ) : currentTab === 'caregiver' ? (
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.tabContent}>
+            <View style={styles.infoBox}>
+              <Text style={styles.infoTitle}>🔔 Caregiver Alerts</Text>
+              <Text style={styles.infoText}>
+                Set up notifications to alert caregivers when communication limits are reached.
+              </Text>
+            </View>
+
+            {caregiverSettings && (
+              <>
+                <View style={styles.settingItem}>
+                  <View style={styles.settingHeader}>
+                    <Text style={styles.settingTitle}>Enable Notifications</Text>
+                    <Text style={styles.settingDescription}>
+                      Turn on automatic alerts when blocked communications reach the threshold
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.toggleContainer}>
+                    <TouchableOpacity
+                      style={[styles.toggleButton, !caregiverSettings.notificationsEnabled && styles.toggleButtonActive]}
+                      onPress={() => updateCaregiverSettings({
+                        ...caregiverSettings,
+                        notificationsEnabled: false
+                      })}
+                    >
+                      <Text style={[styles.toggleText, !caregiverSettings.notificationsEnabled && styles.toggleTextActive]}>
+                        OFF
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[styles.toggleButton, caregiverSettings.notificationsEnabled && styles.toggleButtonActive]}
+                      onPress={() => updateCaregiverSettings({
+                        ...caregiverSettings,
+                        notificationsEnabled: true
+                      })}
+                    >
+                      <Text style={[styles.toggleText, caregiverSettings.notificationsEnabled && styles.toggleTextActive]}>
+                        ON
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {caregiverSettings.notificationsEnabled && (
+                  <>
+                    <View style={styles.settingItem}>
+                      <Text style={styles.settingTitle}>Alert Threshold</Text>
+                      <Text style={styles.settingDescription}>
+                        Send alert after this many blocked communications in a day
+                      </Text>
+                      
+                      <View style={styles.limitsContainer}>
+                        <Text style={styles.limitLabel}>Threshold: {caregiverSettings.alertThreshold}</Text>
+                        <View style={styles.limitButtons}>
+                          <TouchableOpacity 
+                            style={styles.limitButton}
+                            onPress={() => updateCaregiverSettings({
+                              ...caregiverSettings,
+                              alertThreshold: Math.max(1, caregiverSettings.alertThreshold - 1)
+                            })}
+                          >
+                            <Text style={styles.limitButtonText}>-</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            style={styles.limitButton}
+                            onPress={() => updateCaregiverSettings({
+                              ...caregiverSettings,
+                              alertThreshold: caregiverSettings.alertThreshold + 1
+                            })}
+                          >
+                            <Text style={styles.limitButtonText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+
+                    <View style={styles.settingItem}>
+                      <Text style={styles.settingTitle}>📱 SMS Alerts</Text>
+                      
+                      <View style={styles.toggleContainer}>
+                        <TouchableOpacity
+                          style={[styles.toggleButton, !caregiverSettings.smsEnabled && styles.toggleButtonActive]}
+                          onPress={() => updateCaregiverSettings({
+                            ...caregiverSettings,
+                            smsEnabled: false
+                          })}
+                        >
+                          <Text style={[styles.toggleText, !caregiverSettings.smsEnabled && styles.toggleTextActive]}>
+                            OFF
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity
+                          style={[styles.toggleButton, caregiverSettings.smsEnabled && styles.toggleButtonActive]}
+                          onPress={() => updateCaregiverSettings({
+                            ...caregiverSettings,
+                            smsEnabled: true
+                          })}
+                        >
+                          <Text style={[styles.toggleText, caregiverSettings.smsEnabled && styles.toggleTextActive]}>
+                            ON
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {caregiverSettings.smsEnabled && (
+                        <View style={styles.inputContainer}>
+                          <Text style={styles.label}>Caregiver Phone Number</Text>
+                          <TextInput
+                            style={styles.input}
+                            value={caregiverSettings.phoneNumber || ''}
+                            onChangeText={(text) => updateCaregiverSettings({
+                              ...caregiverSettings,
+                              phoneNumber: text
+                            })}
+                            placeholder="+15551234567"
+                            placeholderTextColor="#666"
+                            keyboardType="phone-pad"
+                            autoCapitalize="none"
+                          />
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.settingItem}>
+                      <Text style={styles.settingTitle}>📧 Email Alerts</Text>
+                      
+                      <View style={styles.toggleContainer}>
+                        <TouchableOpacity
+                          style={[styles.toggleButton, !caregiverSettings.emailEnabled && styles.toggleButtonActive]}
+                          onPress={() => updateCaregiverSettings({
+                            ...caregiverSettings,
+                            emailEnabled: false
+                          })}
+                        >
+                          <Text style={[styles.toggleText, !caregiverSettings.emailEnabled && styles.toggleTextActive]}>
+                            OFF
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity
+                          style={[styles.toggleButton, caregiverSettings.emailEnabled && styles.toggleButtonActive]}
+                          onPress={() => updateCaregiverSettings({
+                            ...caregiverSettings,
+                            emailEnabled: true
+                          })}
+                        >
+                          <Text style={[styles.toggleText, caregiverSettings.emailEnabled && styles.toggleTextActive]}>
+                            ON
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {caregiverSettings.emailEnabled && (
+                        <View style={styles.inputContainer}>
+                          <Text style={styles.label}>Caregiver Email</Text>
+                          <TextInput
+                            style={styles.input}
+                            value={caregiverSettings.email || ''}
+                            onChangeText={(text) => updateCaregiverSettings({
+                              ...caregiverSettings,
+                              email: text
+                            })}
+                            placeholder="caregiver@example.com"
+                            placeholderTextColor="#666"
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                          />
+                        </View>
+                      )}
+                    </View>
+
+                    <TouchableOpacity 
+                      style={[styles.saveButton, { backgroundColor: '#FF9800', marginTop: 20 }]} 
+                      onPress={testNotification}
+                    >
+                      <Text style={styles.saveButtonText}>🧪 Send Test Alert</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </>
+            )}
+          </ScrollView>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} style={styles.tabContent}>
             <View style={styles.infoBox}>
@@ -933,6 +1180,9 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
     lineHeight: 18,
+  },
+  inputContainer: {
+    marginTop: 16,
   },
   blockedButtonRow: {
     flexDirection: 'row',

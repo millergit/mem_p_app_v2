@@ -202,6 +202,25 @@ class FrequencyTracker {
     };
   }
 
+  getBlockedCallsToday(contactId: string): number {
+    const now = Date.now();
+    const oneDayAgo = now - (24 * 60 * 60 * 1000);
+
+    return this.blockedCalls.filter(call => 
+      call.contactId === contactId && 
+      call.timestamp > oneDayAgo
+    ).length;
+  }
+
+  canLeaveVoicemail(contact: Contact): boolean {
+    if (!contact.frequencySettings) {
+      return true;
+    }
+
+    const blockedCallsToday = this.getBlockedCallsToday(contact.id);
+    return blockedCallsToday < contact.frequencySettings.voicemailAllowed;
+  }
+
   getDefaultFrequencySettings(): ContactFrequencySettings {
     return {
       calls: {

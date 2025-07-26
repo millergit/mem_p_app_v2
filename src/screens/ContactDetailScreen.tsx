@@ -13,6 +13,7 @@ import {
 import TwilioService from '../services/TwilioService';
 import { Contact } from '../types/Contact';
 import FrequencyTracker from '../services/FrequencyTracker';
+import CaregiverNotificationService from '../services/CaregiverNotificationService';
 
 interface ContactDetailScreenProps {
   contact: Contact;
@@ -24,6 +25,7 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
   const [isCalling, setIsCalling] = useState(false);
   const [twilioConfigured, setTwilioConfigured] = useState(false);
   const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
+  const [caregiverNotifications] = useState(() => CaregiverNotificationService.getInstance());
 
   useEffect(() => {
     checkTwilioConfig();
@@ -91,11 +93,23 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
         // Store blocked call for caregiver review
         await frequencyTracker.storeBlockedCall(contact.id);
         
-        // Ring briefly (1.5 seconds) then show completed - simulates busy line
-        setTimeout(() => {
-          setIsCalling(false);
-          Alert.alert('Call Completed', `Your call with ${contact.name} was completed.`);
-        }, 1500);
+        // Notify caregiver of blocked communication
+        await caregiverNotifications.onCommunicationBlocked();
+        
+        // Check if voicemail is still allowed
+        if (frequencyTracker.canLeaveVoicemail(contact)) {
+          // Ring longer (4 seconds) then show completed - simulates voicemail
+          setTimeout(() => {
+            setIsCalling(false);
+            Alert.alert('Call Completed', `Your call with ${contact.name} was completed. They may have left a voicemail.`);
+          }, 4000);
+        } else {
+          // Ring briefly (1.5 seconds) then show completed - simulates busy line
+          setTimeout(() => {
+            setIsCalling(false);
+            Alert.alert('Call Completed', `Your call with ${contact.name} was completed.`);
+          }, 1500);
+        }
         return;
       }
       

@@ -20,6 +20,7 @@ import { Contact } from '../types/Contact';
 import { Message } from '../types/Message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FrequencyTracker from '../services/FrequencyTracker';
+import CaregiverNotificationService from '../services/CaregiverNotificationService';
 
 interface MessageScreenProps {
   contact: Contact;
@@ -34,6 +35,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
   const [showConversations, setShowConversations] = useState(true);
   const flatListRef = React.useRef<FlatList>(null);
   const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
+  const [caregiverNotifications] = useState(() => CaregiverNotificationService.getInstance());
 
   useEffect(() => {
     checkTwilioConfig();
@@ -150,6 +152,9 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
       
       if (!frequencyTracker.canCommunicate(contact, 'text')) {
         await frequencyTracker.storeBlockedMessage(contact.id, message.trim());
+        
+        // Notify caregiver of blocked communication
+        await caregiverNotifications.onCommunicationBlocked();
         
         await new Promise(resolve => setTimeout(resolve, 800));
         
