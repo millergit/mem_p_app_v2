@@ -25,12 +25,14 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [authToken, setAuthToken] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [saving, setSaving] = useState(false);
-  const [currentTab, setCurrentTab] = useState<'twilio' | 'contacts'>('twilio');
+  const [currentTab, setCurrentTab] = useState<'twilio' | 'contacts' | 'display'>('twilio');
   const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
+  const [showConversations, setShowConversations] = useState(true);
 
   useEffect(() => {
     loadExistingConfig();
     loadSelectedContacts();
+    loadDisplaySettings();
   }, []);
 
   const loadExistingConfig = async () => {
@@ -54,6 +56,17 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     }
   };
 
+  const loadDisplaySettings = async () => {
+    try {
+      const showConversationsString = await AsyncStorage.getItem('show_conversations');
+      if (showConversationsString !== null) {
+        setShowConversations(JSON.parse(showConversationsString));
+      }
+    } catch (error) {
+      console.error('Failed to load display settings:', error);
+    }
+  };
+
   const saveSelectedContacts = async (contacts: Contact[]) => {
     try {
       await AsyncStorage.setItem('selected_contacts', JSON.stringify(contacts));
@@ -61,6 +74,22 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       Alert.alert('Success', 'Selected contacts saved successfully!');
     } catch (error) {
       Alert.alert('Error', 'Failed to save selected contacts');
+    }
+  };
+
+  const saveDisplaySettings = async (showConv: boolean) => {
+    try {
+      await AsyncStorage.setItem('show_conversations', JSON.stringify(showConv));
+      setShowConversations(showConv);
+      Alert.alert(
+        'Setting Saved ✅', 
+        showConv 
+          ? 'Text conversation history will now be shown when messaging.'
+          : 'Text conversation history is now hidden. Only the message input will be shown.',
+        [{ text: 'OK', style: 'default' }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save display settings');
     }
   };
 
@@ -136,6 +165,14 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
             Contacts
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, currentTab === 'display' && styles.activeTab]}
+          onPress={() => setCurrentTab('display')}
+        >
+          <Text style={[styles.tabText, currentTab === 'display' && styles.activeTabText]}>
+            Display
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.content}>
@@ -204,13 +241,52 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
               </TouchableOpacity>
             </View>
           </ScrollView>
-        ) : (
+        ) : currentTab === 'contacts' ? (
           <View style={styles.tabContent}>
             <ContactSelector
               selectedContacts={selectedContacts}
               onContactsChange={saveSelectedContacts}
             />
           </View>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.tabContent}>
+            <View style={styles.infoBox}>
+              <Text style={styles.infoTitle}>👁️ Display Settings</Text>
+              <Text style={styles.infoText}>
+                These settings help make the app easier to use for people with memory difficulties.
+              </Text>
+            </View>
+
+            <View style={styles.settingItem}>
+              <View style={styles.settingHeader}>
+                <Text style={styles.settingTitle}>Show Text Conversation History</Text>
+                <Text style={styles.settingDescription}>
+                  When turned ON: Shows previous messages when texting someone{'\n'}
+                  When turned OFF: Only shows the text input box (simpler view)
+                </Text>
+              </View>
+              
+              <View style={styles.toggleContainer}>
+                <TouchableOpacity
+                  style={[styles.toggleButton, !showConversations && styles.toggleButtonActive]}
+                  onPress={() => saveDisplaySettings(false)}
+                >
+                  <Text style={[styles.toggleText, !showConversations && styles.toggleTextActive]}>
+                    OFF (Simple)
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.toggleButton, showConversations && styles.toggleButtonActive]}
+                  onPress={() => saveDisplaySettings(true)}
+                >
+                  <Text style={[styles.toggleText, showConversations && styles.toggleTextActive]}>
+                    ON (Show History)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
         )}
       </View>
     </SafeAreaView>
@@ -347,5 +423,53 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  settingItem: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  settingHeader: {
+    marginBottom: 16,
+  },
+  settingTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  settingDescription: {
+    fontSize: 16,
+    color: '#ccc',
+    lineHeight: 22,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  toggleButton: {
+    flex: 1,
+    backgroundColor: '#333',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#333',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  toggleText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ccc',
+  },
+  toggleTextActive: {
+    color: '#fff',
   },
 });

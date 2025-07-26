@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import MessageService from './MessageService';
 
 export interface TwilioConfig {
   accountSid: string;
@@ -8,6 +9,7 @@ export interface TwilioConfig {
 
 class TwilioService {
   private config: TwilioConfig | null = null;
+  private pollingInterval: NodeJS.Timeout | null = null;
 
   async loadConfig(): Promise<TwilioConfig | null> {
     try {
@@ -49,7 +51,7 @@ class TwilioService {
     return this.config;
   }
 
-  async sendSMS(to: string, message: string): Promise<boolean> {
+  async sendSMS(to: string, message: string, contactId?: string): Promise<boolean> {
     if (!this.config) {
       throw new Error('Twilio not configured. Please add your credentials in settings.');
     }
@@ -74,6 +76,8 @@ class TwilioService {
       );
 
       if (response.ok) {
+        // Store the sent message locally
+        await MessageService.addMessage(contactId || 'unknown', to, message, 'sent');
         return true;
       } else {
         const error = await response.json();
@@ -82,6 +86,66 @@ class TwilioService {
     } catch (error) {
       console.error('SMS Error:', error);
       throw error;
+    }
+  }
+
+  async fetchRecentMessages(): Promise<void> {
+    if (!this.config) return;
+
+    try {
+      const auth = btoa(`${this.config.accountSid}:${this.config.authToken}`);
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      
+      const response = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${this.config.accountSid}/Messages.json?DateSent>=${thirtyMinutesAgo}&To=${this.config.phoneNumber}`,
+        {
+          headers: {
+            'Authorization': `Basic ${auth}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        for (const twilioMessage of data.messages) {
+          // Only process received messages that we haven't seen before
+          if (twilioMessage.direction === 'inbound') {
+            const existingMessages = MessageService.getMessages(twilioMessage.from);
+            const messageExists = existingMessages.some(msg => 
+              Math.abs(msg.timestamp - new Date(twilioMessage.date_sent).getTime()) < 5000 && 
+              msg.text === twilioMessage.body
+            );
+            
+            if (!messageExists) {
+              await MessageService.addMessage('unknown', twilioMessage.from, twilioMessage.body, 'received');
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch messages:', error);
+    }
+  }
+
+  startMessagePolling(): void {
+    if (this.pollingInterval) return;
+    
+    // Load conversations when starting
+    MessageService.loadConversations();
+    
+    // Poll for new messages every 30 seconds
+    this.pollingInterval = setInterval(() => {
+      this.fetchRecentMessages();
+    }, 30000);
+    
+    // Fetch immediately
+    this.fetchRecentMessages();
+  }
+
+  stopMessagePolling(): void {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
     }
   }
 

@@ -11,10 +11,14 @@ import {
   Platform,
   TouchableWithoutFeedback,
   Keyboard,
-  ScrollView
+  ScrollView,
+  FlatList
 } from 'react-native';
 import TwilioService from '../services/TwilioService';
+import MessageService from '../services/MessageService';
 import { Contact } from '../types/Contact';
+import { Message } from '../types/Message';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface MessageScreenProps {
   contact: Contact;
@@ -25,10 +29,51 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [twilioConfigured, setTwilioConfigured] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [showConversations, setShowConversations] = useState(true);
+  const flatListRef = React.useRef<FlatList>(null);
 
   useEffect(() => {
     checkTwilioConfig();
-  }, []);
+    loadMessages();
+    loadDisplaySettings();
+    TwilioService.startMessagePolling();
+    
+    // Set up polling to refresh messages periodically
+    const interval = setInterval(loadMessages, 5000);
+    
+    return () => {
+      clearInterval(interval);
+      TwilioService.stopMessagePolling();
+    };
+  }, [contact.phoneNumber]);
+
+  const loadDisplaySettings = async () => {
+    try {
+      const showConversationsString = await AsyncStorage.getItem('show_conversations');
+      if (showConversationsString !== null) {
+        setShowConversations(JSON.parse(showConversationsString));
+      }
+    } catch (error) {
+      console.error('Failed to load display settings:', error);
+    }
+  };
+
+  const loadMessages = async () => {
+    await MessageService.loadConversations();
+    const conversationMessages = MessageService.getMessages(contact.phoneNumber);
+    setMessages(conversationMessages);
+    
+    // Mark messages as read
+    await MessageService.markAsRead(contact.phoneNumber);
+    
+    // Scroll to bottom after messages load
+    setTimeout(() => {
+      if (conversationMessages.length > 0) {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }
+    }, 100);
+  };
 
   const checkTwilioConfig = async () => {
     await TwilioService.loadConfig();
@@ -55,20 +100,69 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
 
     setIsSending(true);
     try {
-      await TwilioService.sendSMS(contact.phoneNumber, message.trim());
-      Alert.alert('Message Sent!', `Your message was sent to ${contact.name} via Twilio.`, [
-        { text: 'Send Another', onPress: () => setMessage('') },
-        { text: 'Done', onPress: () => {
-          setMessage('');
-          onBack();
-        }}
-      ]);
+      // Add a small delay to show loading state
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      await TwilioService.sendSMS(contact.phoneNumber, message.trim(), contact.id);
+      setMessage('');
+      
+      // Refresh messages after sending
+      await loadMessages();
+      
+      // Scroll to bottom to show new message
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 200);
+      
+      // Show clear success confirmation
+      Alert.alert(
+        'Message Sent Successfully! ✅',
+        `Your message was sent to ${contact.name}.\n\nPhone: ${contact.phoneNumber}`,
+        [
+          { 
+            text: 'OK', 
+            style: 'default',
+            onPress: () => onBack() 
+          }
+        ],
+        { cancelable: false }
+      );
+      
     } catch (error: any) {
-      Alert.alert('Send Failed', error.message || 'Could not send message. Please try again.');
+      Alert.alert(
+        'Message Failed ❌', 
+        `Could not send your message to ${contact.name}.\n\nPlease try again or ask for help.`,
+        [{ text: 'OK', style: 'default' }]
+      );
     } finally {
       setIsSending(false);
     }
   };
+
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const renderMessage = ({ item: msg }: { item: Message }) => (
+    <View style={[
+      styles.messageBubble,
+      msg.type === 'sent' ? styles.sentMessage : styles.receivedMessage
+    ]}>
+      <Text style={[
+        styles.messageText,
+        msg.type === 'sent' ? styles.sentMessageText : styles.receivedMessageText
+      ]}>
+        {msg.text}
+      </Text>
+      <Text style={[
+        styles.messageTime,
+        msg.type === 'sent' ? styles.sentMessageTime : styles.receivedMessageTime
+      ]}>
+        {formatTime(msg.timestamp)}
+      </Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -84,14 +178,44 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.content}>
-              <Text style={styles.label}>Your Message:</Text>
+        {showConversations && (
+          <View style={styles.messagesContainer}>
+            {messages.length > 0 ? (
+              <FlatList
+                ref={flatListRef}
+                data={messages}
+                renderItem={renderMessage}
+                keyExtractor={(item) => item.id}
+                style={styles.messagesList}
+                contentContainerStyle={styles.messagesContent}
+                showsVerticalScrollIndicator={false}
+                onContentSizeChange={() => {
+                  // Auto-scroll when content changes (new messages)
+                  if (messages.length > 0) {
+                    flatListRef.current?.scrollToEnd({ animated: true });
+                  }
+                }}
+              />
+            ) : (
+              <View style={styles.noMessagesContainer}>
+                <Text style={styles.noMessagesText}>No messages yet. Start a conversation!</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {!showConversations && (
+          <View style={styles.simpleContainer}>
+            <View style={styles.simpleHeader}>
+              <Text style={styles.simpleTitle}>Send a message to {contact.name}</Text>
+              <Text style={styles.simpleSubtitle}>{contact.phoneNumber}</Text>
+            </View>
+          </View>
+        )}
+
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.inputSection}>
+            <View style={styles.inputContainer}>
               <TextInput
                 style={styles.textInput}
                 multiline
@@ -100,9 +224,19 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
                 placeholder="Type your message here..."
                 placeholderTextColor="#666"
                 textAlignVertical="top"
-                autoFocus
-                scrollEnabled={true}
+                maxLength={1600}
               />
+            </View>
+            
+            <View style={styles.buttonRow}>
+              <TouchableOpacity 
+                style={styles.cancelButton} 
+                onPress={onBack}
+              >
+                <Text style={styles.cancelButtonText}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
               
               <TouchableOpacity 
                 style={[styles.sendButton, isSending && styles.sendButtonDisabled]} 
@@ -110,12 +244,12 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
                 disabled={isSending}
               >
                 <Text style={styles.sendButtonText}>
-                  {isSending ? 'Sending...' : `📱 Send to ${contact.name}`}
+                  {isSending ? 'Sending...' : 'Send ↑'}
                 </Text>
               </TouchableOpacity>
             </View>
-          </TouchableWithoutFeedback>
-        </ScrollView>
+          </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -155,49 +289,145 @@ const styles = StyleSheet.create({
   keyboardContainer: {
     flex: 1,
   },
-  scrollView: {
+  messagesContainer: {
     flex: 1,
+    paddingHorizontal: 16,
   },
-  scrollContent: {
-    flexGrow: 1,
+  simpleContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
   },
-  content: {
-    padding: 20,
-    minHeight: '100%',
+  simpleHeader: {
+    alignItems: 'center',
+    paddingVertical: 40,
   },
-  label: {
-    fontSize: 20,
+  simpleTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  simpleSubtitle: {
+    fontSize: 18,
+    color: '#ccc',
+    textAlign: 'center',
+  },
+  messagesList: {
+    flex: 1,
+  },
+  messagesContent: {
+    paddingVertical: 10,
+  },
+  noMessagesContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noMessagesText: {
+    color: '#666',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  messageBubble: {
+    maxWidth: '80%',
+    padding: 12,
+    borderRadius: 16,
+    marginVertical: 4,
+  },
+  sentMessage: {
+    backgroundColor: '#2196F3',
+    alignSelf: 'flex-end',
+    borderBottomRightRadius: 4,
+  },
+  receivedMessage: {
+    backgroundColor: '#333',
+    alignSelf: 'flex-start',
+    borderBottomLeftRadius: 4,
+  },
+  messageText: {
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  sentMessageText: {
+    color: '#fff',
+  },
+  receivedMessageText: {
+    color: '#fff',
+  },
+  messageTime: {
+    fontSize: 11,
+    marginTop: 4,
+  },
+  sentMessageTime: {
+    color: '#cce7ff',
+    textAlign: 'right',
+  },
+  receivedMessageTime: {
+    color: '#aaa',
+    textAlign: 'left',
+  },
+  inputSection: {
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  inputContainer: {
     marginBottom: 12,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   textInput: {
     backgroundColor: '#1a1a1a',
-    borderRadius: 16,
-    padding: 16,
-    fontSize: 18,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
     color: '#fff',
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#333',
-    height: 120,
-    marginBottom: 20,
+    maxHeight: 100,
+    width: '100%',
   },
   sendButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
+    flex: 1,
+    backgroundColor: '#2196F3',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 60,
+    minHeight: 44,
   },
   sendButtonDisabled: {
     backgroundColor: '#666',
   },
   sendButtonText: {
     color: '#fff',
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#666',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
     textAlign: 'center',
   },
 });
