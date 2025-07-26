@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Contacts",
-    "slug": "contacts-app",
+    "slug": "memory-care-phone",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
