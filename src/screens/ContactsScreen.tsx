@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, SafeAreaView, FlatList } from 'react-native';
+import { StyleSheet, SafeAreaView, FlatList, View, Text } from 'react-native';
 import ContactCard from '../components/ContactCard';
 import { Contact } from '../types/Contact';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -36,11 +36,26 @@ const sampleContacts: Contact[] = [
   },
 ];
 
+// Create a module-level cache to persist across component remounts
+let contactsCache: Contact[] | null = null;
+let hasInitiallyLoaded = false;
+
 export default function ContactsScreen({ onContactPress, onPinEntryPress }: ContactsScreenProps) {
-  const [contacts, setContacts] = useState<Contact[]>(sampleContacts);
+  const [contacts, setContacts] = useState<Contact[]>(contactsCache || []);
+  const [isLoading, setIsLoading] = useState(!hasInitiallyLoaded);
 
   useEffect(() => {
-    loadSelectedContacts();
+    // If we already have cached data, use it immediately
+    if (hasInitiallyLoaded && contactsCache) {
+      setContacts(contactsCache);
+      setIsLoading(false);
+      return;
+    }
+    
+    // Only load if we haven't loaded before
+    if (!hasInitiallyLoaded) {
+      loadSelectedContacts();
+    }
   }, []);
 
   const loadSelectedContacts = async () => {
@@ -50,11 +65,22 @@ export default function ContactsScreen({ onContactPress, onPinEntryPress }: Cont
         const selectedContacts = JSON.parse(contactsString);
         if (selectedContacts.length > 0) {
           setContacts(selectedContacts);
+          contactsCache = selectedContacts;
+        } else {
+          setContacts(sampleContacts);
+          contactsCache = sampleContacts;
         }
+      } else {
+        setContacts(sampleContacts);
+        contactsCache = sampleContacts;
       }
     } catch (error) {
       console.error('Failed to load selected contacts:', error);
-      // Keep using sample contacts if loading fails
+      setContacts(sampleContacts);
+      contactsCache = sampleContacts;
+    } finally {
+      setIsLoading(false);
+      hasInitiallyLoaded = true;
     }
   };
 
@@ -71,16 +97,24 @@ export default function ContactsScreen({ onContactPress, onPinEntryPress }: Cont
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <FlatList
-        data={contacts}
-        renderItem={renderContact}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-      />
-    </SafeAreaView>
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <SafeAreaView style={styles.container}>
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading contacts...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={contacts}
+          renderItem={renderContact}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+        />
+      )}
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -92,5 +126,14 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 8,
     paddingBottom: 120, // Extra padding for assistive access back button
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 18,
+    color: '#ccc',
   },
 });

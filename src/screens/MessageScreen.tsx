@@ -33,20 +33,25 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
   const [twilioConfigured, setTwilioConfigured] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [showConversations, setShowConversations] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
   const flatListRef = React.useRef<FlatList>(null);
   const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
   const [caregiverNotifications] = useState(() => CaregiverNotificationService.getInstance());
 
   useEffect(() => {
-    checkTwilioConfig();
-    loadMessages();
-    loadDisplaySettings();
-    TwilioService.startMessagePolling();
+    // Small delay to ensure proper component mounting and SafeAreaView rendering
+    const initTimer = setTimeout(() => {
+      checkTwilioConfig();
+      loadMessages();
+      loadDisplaySettings();
+      TwilioService.startMessagePolling();
+    }, 100);
     
     // Set up polling to refresh messages periodically
     const interval = setInterval(loadMessages, 5000);
     
     return () => {
+      clearTimeout(initTimer);
       clearInterval(interval);
       TwilioService.stopMessagePolling();
     };
@@ -70,6 +75,11 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
     
     // Mark messages as read
     await MessageService.markAsRead(contact.phoneNumber);
+    
+    // Set initial load to false after first load
+    if (initialLoad) {
+      setInitialLoad(false);
+    }
     
     // Scroll to bottom after messages load
     setTimeout(() => {
@@ -242,7 +252,8 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backButtonText}>← Back</Text>
@@ -257,7 +268,10 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
       >
         {showConversations && (
           <View style={styles.messagesContainer}>
-            {messages.length > 0 ? (
+            {initialLoad ? (
+              // Show empty space during initial load to prevent flicker
+              <View style={styles.noMessagesContainer} />
+            ) : messages.length > 0 ? (
               <FlatList
                 ref={flatListRef}
                 data={messages}
@@ -328,7 +342,8 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 

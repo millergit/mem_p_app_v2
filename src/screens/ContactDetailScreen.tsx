@@ -157,11 +157,12 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
   };
 
   return (
-    <SafeAreaView 
-      style={styles.container}
-      accessibilityActions={accessibilityActions}
-      onAccessibilityAction={onAccessibilityAction}
-    >
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <SafeAreaView 
+        style={styles.container}
+        accessibilityActions={accessibilityActions}
+        onAccessibilityAction={onAccessibilityAction}
+      >
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Text style={styles.backButtonText}>← Back</Text>
@@ -204,7 +205,8 @@ export default function ContactDetailScreen({ contact, onBack, onMessage }: Cont
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
