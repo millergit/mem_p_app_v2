@@ -14,10 +14,12 @@ import {
 } from 'react-native';
 import TwilioService, { TwilioConfig } from '../services/TwilioService';
 import ContactSelector from '../components/ContactSelector';
+import { clearContactsCache } from './ContactsScreen';
 import { Contact, ContactFrequencySettings } from '../types/Contact';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FrequencyTracker, { BlockedMessage, BlockedCall } from '../services/FrequencyTracker';
 import CaregiverNotificationService, { CaregiverSettings } from '../services/CaregiverNotificationService';
+import BlockedCommunicationsScreen from './BlockedCommunicationsScreen';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -29,6 +31,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [userPhoneNumber, setUserPhoneNumber] = useState('');
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [currentTab, setCurrentTab] = useState<'twilio' | 'contacts' | 'display' | 'communication' | 'caregiver'>('twilio');
   const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
   const [showConversations, setShowConversations] = useState(true);
@@ -37,6 +40,8 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
   const [caregiverNotifications] = useState(() => CaregiverNotificationService.getInstance());
   const [caregiverSettings, setCaregiverSettings] = useState<CaregiverSettings | null>(null);
+  const [violationStats, setViolationStats] = useState<any>(null);
+  const [showBlockedScreen, setShowBlockedScreen] = useState(false);
 
   useEffect(() => {
     loadExistingConfig();
@@ -106,6 +111,12 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     try {
       const settings = await caregiverNotifications.loadSettings();
       setCaregiverSettings(settings);
+      
+      // Load violation stats if notifications are enabled
+      if (settings.notificationsEnabled) {
+        const stats = await caregiverNotifications.getCurrentViolationStats();
+        setViolationStats(stats);
+      }
     } catch (error) {
       console.error('Failed to load caregiver settings:', error);
     }
@@ -115,6 +126,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     try {
       await AsyncStorage.setItem('selected_contacts', JSON.stringify(contacts));
       setSelectedContacts(contacts);
+      clearContactsCache(); // Clear cache so ContactsScreen refreshes
       Alert.alert('Success', 'Selected contacts saved successfully!');
     } catch (error) {
       Alert.alert('Error', 'Failed to save selected contacts');
@@ -123,22 +135,9 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
 
   const updateContactFrequencySettings = async (contactId: string, settings: ContactFrequencySettings) => {
     try {
-      // Auto-enable frequency limits when they're set below default values
-      const autoEnabledSettings = {
-        ...settings,
-        calls: {
-          ...settings.calls,
-          enabled: settings.calls.maxPerHour < 10 || settings.calls.maxPerDay < 20
-        },
-        texts: {
-          ...settings.texts,
-          enabled: settings.texts.maxPerHour < 20 || settings.texts.maxPerDay < 50
-        }
-      };
-
       const updatedContacts = selectedContacts.map(contact => 
         contact.id === contactId 
-          ? { ...contact, frequencySettings: autoEnabledSettings }
+          ? { ...contact, frequencySettings: settings }
           : contact
       );
       await AsyncStorage.setItem('selected_contacts', JSON.stringify(updatedContacts));
@@ -153,37 +152,13 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       Alert.alert('No Blocked Communications', 'There are no blocked calls or messages to display.');
       return;
     }
-    let alertMessage = '';
-    
-    if (blockedMessages.length > 0) {
-      alertMessage += `BLOCKED MESSAGES (${blockedMessages.length}):\n\n`;
-      blockedMessages.slice(-5).forEach((msg, index) => {
-        const contact = selectedContacts.find(c => c.id === msg.contactId);
-        const date = new Date(msg.timestamp).toLocaleString();
-        alertMessage += `${index + 1}. ${contact?.name || 'Unknown'} (${date}):\n"${msg.message}"\n\n`;
-      });
-    }
-    
-    if (blockedCalls.length > 0) {
-      alertMessage += `BLOCKED CALLS (${blockedCalls.length}):\n\n`;
-      blockedCalls.slice(-5).forEach((call, index) => {
-        const contact = selectedContacts.find(c => c.id === call.contactId);
-        const date = new Date(call.timestamp).toLocaleString();
-        alertMessage += `${index + 1}. ${contact?.name || 'Unknown'} (${date})\n`;
-      });
-    }
-    
-    if (blockedMessages.length > 5 || blockedCalls.length > 5) {
-      alertMessage += '\n(Showing most recent 5 of each type)';
-    }
-
-    Alert.alert('Blocked Communications', alertMessage, [{ text: 'OK' }]);
+    setShowBlockedScreen(true);
   };
 
   const clearBlockedMessages = async () => {
     Alert.alert(
       'Clear Blocked Messages',
-      'Are you sure you want to clear all blocked messages?',
+      'Are you sure you want to clear all blocked messages? This will also reset the alert system.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -191,8 +166,10 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
           style: 'destructive',
           onPress: async () => {
             await frequencyTracker.clearBlockedMessages();
+            await caregiverNotifications.resetAlerts();
             setBlockedMessages([]);
-            Alert.alert('Cleared', 'All blocked messages have been cleared.');
+            await loadCaregiverSettings(); // Refresh alert status
+            Alert.alert('Cleared', 'All blocked messages have been cleared and alert system has been reset.');
           },
         },
       ]
@@ -202,7 +179,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const clearAllBlocked = async () => {
     Alert.alert(
       'Clear All Blocked Communications',
-      'Are you sure you want to clear all blocked calls and messages?',
+      'Are you sure you want to clear all blocked calls and messages? This will also reset the alert system.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -210,9 +187,11 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
           style: 'destructive',
           onPress: async () => {
             await frequencyTracker.clearAllBlocked();
+            await caregiverNotifications.resetAlerts();
             setBlockedMessages([]);
             setBlockedCalls([]);
-            Alert.alert('Cleared', 'All blocked communications have been cleared.');
+            await loadCaregiverSettings(); // Refresh alert status
+            Alert.alert('Cleared', 'All blocked communications have been cleared and alert system has been reset.');
           },
         },
       ]
@@ -301,6 +280,43 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     }
   };
 
+  const testConnection = async () => {
+    if (!accountSid.trim() || !authToken.trim() || !phoneNumber.trim()) {
+      Alert.alert('Missing Information', 'Please fill in Account SID, Auth Token, and Phone Number first');
+      return;
+    }
+
+    setTesting(true);
+    try {
+      const auth = btoa(`${accountSid.trim()}:${authToken.trim()}`);
+      
+      // Test by fetching account info
+      const response = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid.trim()}.json`,
+        {
+          headers: {
+            'Authorization': `Basic ${auth}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        Alert.alert(
+          'Connection Successful! ✅', 
+          `Connected to Twilio account: ${data.friendly_name || data.sid}\n\nStatus: ${data.status}`
+        );
+      } else {
+        const error = await response.json();
+        Alert.alert('Connection Failed', `Could not connect to Twilio:\n${error.message || 'Invalid credentials'}`);
+      }
+    } catch (error) {
+      Alert.alert('Connection Failed', 'Could not connect to Twilio. Please check your internet connection and credentials.');
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const clearConfig = async () => {
     Alert.alert(
       'Clear Settings',
@@ -336,6 +352,14 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
         break;
     }
   };
+
+  if (showBlockedScreen) {
+    return (
+      <BlockedCommunicationsScreen 
+        onBack={() => setShowBlockedScreen(false)}
+      />
+    );
+  }
 
   return (
     <SafeAreaView 
@@ -459,6 +483,16 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
             </View>
 
             <View style={styles.buttonContainer}>
+              <TouchableOpacity 
+                style={[styles.testButton, testing && styles.saveButtonDisabled]} 
+                onPress={testConnection}
+                disabled={testing}
+              >
+                <Text style={styles.testButtonText}>
+                  {testing ? 'Testing...' : '🔗 Test Connection'}
+                </Text>
+              </TouchableOpacity>
+
               <TouchableOpacity 
                 style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
                 onPress={saveConfig}
@@ -608,6 +642,9 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
                             <Text style={styles.limitButtonText}>+</Text>
                           </TouchableOpacity>
                         </View>
+                        <Text style={styles.voicemailExplainer}>
+                          After reaching limits, "Call Completed" message is shown to user
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -684,42 +721,11 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
                             <Text style={styles.limitButtonText}>+</Text>
                           </TouchableOpacity>
                         </View>
+                        <Text style={styles.voicemailExplainer}>
+                          After reaching limits, "Message Sent Successfully" is shown to user
+                        </Text>
                       </View>
                     )}
-                  </View>
-
-                  <View style={styles.settingSection}>
-                    <Text style={styles.sectionTitle}>📞 Voicemail Allowed</Text>
-                    <Text style={styles.settingDescription}>
-                      How many blocked calls can leave voicemail before being completely blocked
-                    </Text>
-                    
-                    <View style={styles.limitsContainer}>
-                      <Text style={styles.limitLabel}>Voicemails Allowed: {settings.voicemailAllowed}</Text>
-                      <View style={styles.limitButtons}>
-                        <TouchableOpacity 
-                          style={styles.limitButton}
-                          onPress={() => updateContactFrequencySettings(contact.id, {
-                            ...settings,
-                            voicemailAllowed: Math.max(0, settings.voicemailAllowed - 1)
-                          })}
-                        >
-                          <Text style={styles.limitButtonText}>-</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.limitButton}
-                          onPress={() => updateContactFrequencySettings(contact.id, {
-                            ...settings,
-                            voicemailAllowed: settings.voicemailAllowed + 1
-                          })}
-                        >
-                          <Text style={styles.limitButtonText}>+</Text>
-                        </TouchableOpacity>
-                      </View>
-                      <Text style={styles.voicemailExplainer}>
-                        After {settings.voicemailAllowed} blocked calls, calls will show "busy" to caller
-                      </Text>
-                    </View>
                   </View>
                 </View>
               );
@@ -773,14 +779,15 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
 
                 {caregiverSettings.notificationsEnabled && (
                   <>
+
                     <View style={styles.settingItem}>
-                      <Text style={styles.settingTitle}>Alert Threshold</Text>
+                      <Text style={styles.settingTitle}>⚠️ Alert Level 1</Text>
                       <Text style={styles.settingDescription}>
-                        Send alert after this many blocked communications in a day
+                        First alert threshold
                       </Text>
                       
                       <View style={styles.limitsContainer}>
-                        <Text style={styles.limitLabel}>Threshold: {caregiverSettings.alertThreshold}</Text>
+                        <Text style={styles.limitLabel}>Send alert after: {caregiverSettings.alertThreshold} violations</Text>
                         <View style={styles.limitButtons}>
                           <TouchableOpacity 
                             style={styles.limitButton}
@@ -801,8 +808,106 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
                             <Text style={styles.limitButtonText}>+</Text>
                           </TouchableOpacity>
                         </View>
+                        
+                        {violationStats && violationStats.primaryTriggered && (
+                          <View style={styles.alertStatusRow}>
+                            <Text style={styles.alertSentText}>
+                              ✅ Level 1 Alert triggered at {violationStats.primaryAlertTime || 'recently'}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                     </View>
+
+                    <View style={styles.settingItem}>
+                      <Text style={styles.settingTitle}>🚨 Alert Level 2</Text>
+                      <Text style={styles.settingDescription}>
+                        Second alert threshold (optional)
+                      </Text>
+                      
+                      <View style={styles.toggleContainer}>
+                        <TouchableOpacity
+                          style={[styles.toggleButton, !caregiverSettings.secondLevelEnabled && styles.toggleButtonActive]}
+                          onPress={() => updateCaregiverSettings({
+                            ...caregiverSettings,
+                            secondLevelEnabled: false
+                          })}
+                        >
+                          <Text style={[styles.toggleText, !caregiverSettings.secondLevelEnabled && styles.toggleTextActive]}>
+                            OFF
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity
+                          style={[styles.toggleButton, caregiverSettings.secondLevelEnabled && styles.toggleButtonActive]}
+                          onPress={() => updateCaregiverSettings({
+                            ...caregiverSettings,
+                            secondLevelEnabled: true
+                          })}
+                        >
+                          <Text style={[styles.toggleText, caregiverSettings.secondLevelEnabled && styles.toggleTextActive]}>
+                            ON
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {caregiverSettings.secondLevelEnabled && (
+                        <View style={styles.limitsContainer}>
+                          <Text style={styles.limitLabel}>Send alert after: {caregiverSettings.secondLevelThreshold || 15} violations</Text>
+                          <View style={styles.limitButtons}>
+                            <TouchableOpacity 
+                              style={styles.limitButton}
+                              onPress={() => updateCaregiverSettings({
+                                ...caregiverSettings,
+                                secondLevelThreshold: Math.max(caregiverSettings.alertThreshold + 1, (caregiverSettings.secondLevelThreshold || 15) - 1)
+                              })}
+                            >
+                              <Text style={styles.limitButtonText}>-</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                              style={styles.limitButton}
+                              onPress={() => updateCaregiverSettings({
+                                ...caregiverSettings,
+                                secondLevelThreshold: (caregiverSettings.secondLevelThreshold || 15) + 1
+                              })}
+                            >
+                              <Text style={styles.limitButtonText}>+</Text>
+                            </TouchableOpacity>
+                          </View>
+                          
+                          {violationStats && violationStats.escalationTriggered && (
+                            <View style={styles.alertStatusRow}>
+                              <Text style={styles.alertSentText}>
+                                🚨 Level 2 Alert triggered at {violationStats.escalationAlertTime || 'recently'}
+                              </Text>
+                            </View>
+                          )}
+                          
+                          <Text style={styles.voicemailExplainer}>
+                            Must be higher than Level 1 ({caregiverSettings.alertThreshold})
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {violationStats && (violationStats.primaryTriggered || violationStats.escalationTriggered) && (
+                      <View style={styles.settingItem}>
+                        <Text style={styles.settingTitle}>🔄 Alert Status</Text>
+                        <Text style={styles.settingDescription}>
+                          Today's violations: {violationStats.todayBlocked} | Reset clears violation count but keeps blocked data
+                        </Text>
+                        
+                        <TouchableOpacity 
+                          style={[styles.saveButton, { backgroundColor: '#FF5722' }]}
+                          onPress={async () => {
+                            await caregiverNotifications.resetAlerts();
+                            await loadCaregiverSettings();
+                          }}
+                        >
+                          <Text style={styles.saveButtonText}>🔄 Reset Alert System</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
 
                     <View style={styles.settingItem}>
                       <Text style={styles.settingTitle}>📱 SMS Alerts</Text>
@@ -1040,6 +1145,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  testButton: {
+    backgroundColor: '#FF9800',
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  testButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
   settingItem: {
     backgroundColor: '#1a1a1a',
     borderRadius: 16,
@@ -1166,5 +1282,87 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
+  },
+  alertStatusContainer: {
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  statusIndicator: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 16,
+  },
+  statusText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  resetButton: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  resetButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  statsContainer: {
+    backgroundColor: '#111',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  statRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statLabel: {
+    fontSize: 16,
+    color: '#ccc',
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  alertTimestamp: {
+    fontSize: 12,
+    color: '#aaa',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  resetButtonsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    justifyContent: 'center',
+  },
+  alertStatusRow: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+  },
+  currentCount: {
+    fontSize: 16,
+    color: '#ccc',
+    marginBottom: 8,
+  },
+  alertInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  alertSentText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    flex: 1,
   },
 });

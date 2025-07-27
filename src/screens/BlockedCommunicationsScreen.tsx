@@ -2,34 +2,27 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  FlatList,
+  TouchableOpacity,
+  ScrollView,
   Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FrequencyTracker, { BlockedMessage, BlockedCall } from '../services/FrequencyTracker';
-import { Contact } from '../types/Contact';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Contact } from '../types/Contact';
 
 interface BlockedCommunicationsScreenProps {
   onBack: () => void;
 }
 
-interface CombinedBlockedItem {
-  id: string;
-  type: 'message' | 'call';
-  contactId: string;
-  contactName: string;
-  timestamp: number;
-  message?: string;
-  voicemailRecordingUrl?: string;
-}
-
 export default function BlockedCommunicationsScreen({ onBack }: BlockedCommunicationsScreenProps) {
-  const [blockedItems, setBlockedItems] = useState<CombinedBlockedItem[]>([]);
-  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
+  const [blockedMessages, setBlockedMessages] = useState<BlockedMessage[]>([]);
+  const [blockedCalls, setBlockedCalls] = useState<BlockedCall[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [frequencyTracker] = useState(() => FrequencyTracker.getInstance());
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadData();
@@ -37,40 +30,28 @@ export default function BlockedCommunicationsScreen({ onBack }: BlockedCommunica
 
   const loadData = async () => {
     try {
-      // Load contacts
-      const contactsString = await AsyncStorage.getItem('selected_contacts');
-      const contacts = contactsString ? JSON.parse(contactsString) : [];
-      setSelectedContacts(contacts);
-
-      // Load blocked communications
       await frequencyTracker.loadRecords();
-      const blockedMessages = frequencyTracker.getBlockedMessages();
-      const blockedCalls = frequencyTracker.getBlockedCalls();
-
-      // Combine and sort by timestamp
-      const combined: CombinedBlockedItem[] = [
-        ...blockedMessages.map(msg => ({
-          id: msg.id,
-          type: 'message' as const,
-          contactId: msg.contactId,
-          contactName: contacts.find((c: Contact) => c.id === msg.contactId)?.name || 'Unknown',
-          timestamp: msg.timestamp,
-          message: msg.message,
-        })),
-        ...blockedCalls.map(call => ({
-          id: call.id,
-          type: 'call' as const,
-          contactId: call.contactId,
-          contactName: contacts.find((c: Contact) => c.id === call.contactId)?.name || 'Unknown',
-          timestamp: call.timestamp,
-          voicemailRecordingUrl: call.voicemailRecordingUrl,
-        })),
-      ].sort((a, b) => b.timestamp - a.timestamp);
-
-      setBlockedItems(combined);
+      setBlockedMessages(frequencyTracker.getBlockedMessages());
+      setBlockedCalls(frequencyTracker.getBlockedCalls());
+      
+      // Load contacts for names
+      const contactsString = await AsyncStorage.getItem('selected_contacts');
+      if (contactsString) {
+        setContacts(JSON.parse(contactsString));
+      }
     } catch (error) {
       console.error('Failed to load blocked communications:', error);
     }
+  };
+
+  const getContactName = (contactId: string): string => {
+    const contact = contacts.find(c => c.id === contactId);
+    return contact?.name || 'Unknown Contact';
+  };
+
+  const formatTimestamp = (timestamp: number): string => {
+    const date = new Date(timestamp);
+    return date.toLocaleString();
   };
 
   const clearAllBlocked = async () => {
@@ -84,7 +65,7 @@ export default function BlockedCommunicationsScreen({ onBack }: BlockedCommunica
           style: 'destructive',
           onPress: async () => {
             await frequencyTracker.clearAllBlocked();
-            setBlockedItems([]);
+            await loadData();
             Alert.alert('Cleared', 'All blocked communications have been cleared.');
           },
         },
@@ -92,91 +73,82 @@ export default function BlockedCommunicationsScreen({ onBack }: BlockedCommunica
     );
   };
 
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-
-    if (diffHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    }
-  };
-
-  const renderItem = ({ item }: { item: CombinedBlockedItem }) => (
-    <View style={styles.itemContainer}>
-      <View style={styles.itemHeader}>
-        <View style={styles.itemInfo}>
-          <Text style={styles.contactName}>{item.contactName}</Text>
-          <Text style={styles.timestamp}>{formatDate(item.timestamp)}</Text>
-        </View>
-        <View style={[styles.typeTag, item.type === 'call' ? styles.callTag : styles.messageTag]}>
-          <Text style={styles.typeText}>
-            {item.type === 'call' ? '📞 Call' : '💬 Text'}
-          </Text>
-        </View>
-      </View>
-      
-      {item.type === 'message' && item.message && (
-        <View style={styles.messageContent}>
-          <Text style={styles.messageText}>"{item.message}"</Text>
-        </View>
-      )}
-      
-      {item.type === 'call' && item.voicemailRecordingUrl && (
-        <View style={styles.voicemailContent}>
-          <Text style={styles.voicemailText}>🎵 Voicemail recording available</Text>
-        </View>
-      )}
-    </View>
-  );
+  // Combine and sort all violations by timestamp
+  const allViolations = [
+    ...blockedMessages.map(msg => ({ ...msg, type: 'message' as const })),
+    ...blockedCalls.map(call => ({ ...call, type: 'call' as const }))
+  ].sort((a, b) => b.timestamp - a.timestamp); // Most recent first
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backButtonText}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Blocked Communications</Text>
-      </View>
+    <View style={{ flex: 1, backgroundColor: '#000', paddingTop: insets.top }}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={onBack}>
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Blocked Communications</Text>
+        </View>
 
-      <View style={styles.content}>
-        {blockedItems.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No Blocked Communications</Text>
-            <Text style={styles.emptyText}>
-              When calls or messages are blocked due to frequency limits, they will appear here for caregiver review.
-            </Text>
-          </View>
-        ) : (
-          <>
-            <View style={styles.summary}>
-              <Text style={styles.summaryText}>
-                Total: {blockedItems.length} blocked communications
-              </Text>
-              <Text style={styles.summarySubtext}>
-                📞 {blockedItems.filter(i => i.type === 'call').length} calls • 
-                💬 {blockedItems.filter(i => i.type === 'message').length} messages
+        <View style={styles.summary}>
+          <Text style={styles.summaryText}>
+            📝 {blockedMessages.length} blocked messages • 📞 {blockedCalls.length} blocked calls
+          </Text>
+          <Text style={styles.summarySubtext}>
+            Total: {allViolations.length} blocked communications
+          </Text>
+        </View>
+
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {allViolations.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No blocked communications yet.</Text>
+              <Text style={styles.emptySubtext}>
+                When frequency limits are reached, blocked communications will appear here.
               </Text>
             </View>
+          ) : (
+            allViolations.map((violation, index) => (
+              <View key={`${violation.type}-${violation.id}`} style={styles.violationCard}>
+                <View style={styles.violationHeader}>
+                  <View style={styles.violationTypeContainer}>
+                    <Text style={styles.violationIcon}>
+                      {violation.type === 'message' ? '💬' : '📞'}
+                    </Text>
+                    <Text style={styles.violationType}>
+                      {violation.type === 'message' ? 'Message' : 'Call'}
+                    </Text>
+                  </View>
+                  <Text style={styles.violationNumber}>#{allViolations.length - index}</Text>
+                </View>
+                
+                <Text style={styles.contactName}>
+                  {getContactName(violation.contactId)}
+                </Text>
+                
+                <Text style={styles.timestamp}>
+                  {formatTimestamp(violation.timestamp)}
+                </Text>
+                
+                {violation.type === 'message' && (
+                  <View style={styles.messageContainer}>
+                    <Text style={styles.messageLabel}>Message:</Text>
+                    <Text style={styles.messageText}>"{(violation as any).message}"</Text>
+                  </View>
+                )}
+              </View>
+            ))
+          )}
+        </ScrollView>
 
-            <FlatList
-              data={blockedItems}
-              renderItem={renderItem}
-              keyExtractor={(item) => item.id}
-              style={styles.list}
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-            />
-
+        {allViolations.length > 0 && (
+          <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.clearButton} onPress={clearAllBlocked}>
-              <Text style={styles.clearButtonText}>🗑️ Clear All Blocked</Text>
+              <Text style={styles.clearButtonText}>🗑️ Clear All</Text>
             </TouchableOpacity>
-          </>
+          </View>
         )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -188,7 +160,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 20,
+    paddingTop: 10,
     paddingBottom: 16,
     paddingHorizontal: 20,
     backgroundColor: '#1a1a1a',
@@ -201,64 +173,55 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   backButtonText: {
-    fontSize: 24,
+    fontSize: 20,
     color: '#2196F3',
     fontWeight: 'bold',
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#fff',
     flex: 1,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#ccc',
-    textAlign: 'center',
-    lineHeight: 24,
   },
   summary: {
+    padding: 20,
     backgroundColor: '#1a1a1a',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#333',
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
   },
   summaryText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
     color: '#fff',
+    fontWeight: 'bold',
     marginBottom: 4,
   },
   summarySubtext: {
     fontSize: 14,
     color: '#ccc',
   },
-  list: {
+  scrollView: {
     flex: 1,
+    padding: 16,
   },
-  listContent: {
-    paddingBottom: 20,
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
   },
-  itemContainer: {
+  emptyText: {
+    fontSize: 18,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  violationCard: {
     backgroundColor: '#1a1a1a',
     borderRadius: 12,
     padding: 16,
@@ -266,71 +229,67 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#333',
   },
-  itemHeader: {
+  violationHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  itemInfo: {
-    flex: 1,
+  violationTypeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  violationIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  violationType: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  violationNumber: {
+    fontSize: 14,
+    color: '#888',
+    fontWeight: 'bold',
   },
   contactName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#2196F3',
     marginBottom: 4,
   },
   timestamp: {
     fontSize: 14,
-    color: '#888',
+    color: '#ccc',
+    marginBottom: 8,
   },
-  typeTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginLeft: 12,
-  },
-  callTag: {
-    backgroundColor: '#2a4a2a',
-  },
-  messageTag: {
-    backgroundColor: '#2a2a4a',
-  },
-  typeText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  messageContent: {
-    backgroundColor: '#111',
-    padding: 12,
-    borderRadius: 8,
+  messageContainer: {
     marginTop: 8,
+    padding: 12,
+    backgroundColor: '#111',
+    borderRadius: 8,
+  },
+  messageLabel: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 4,
   },
   messageText: {
-    fontSize: 16,
-    color: '#ccc',
-    fontStyle: 'italic',
-    lineHeight: 20,
-  },
-  voicemailContent: {
-    backgroundColor: '#2a1a00',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  voicemailText: {
     fontSize: 14,
-    color: '#cc9900',
-    fontWeight: 'bold',
+    color: '#fff',
+    lineHeight: 18,
+  },
+  buttonContainer: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
   },
   clearButton: {
     backgroundColor: '#FF5722',
     paddingVertical: 16,
-    borderRadius: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    marginTop: 20,
   },
   clearButtonText: {
     color: '#fff',

@@ -88,9 +88,21 @@ export default function ContactSelector({ selectedContacts, onContactsChange }: 
     }
   };
 
-  const filteredContacts = deviceContacts.filter(contact =>
-    contact.name.toLowerCase().includes(searchText.toLowerCase())
-  );
+  const filteredContacts = deviceContacts
+    .filter(contact =>
+      contact.name.toLowerCase().includes(searchText.toLowerCase())
+    )
+    .sort((a, b) => {
+      const aSelected = isContactSelected(a);
+      const bSelected = isContactSelected(b);
+      
+      // Selected contacts rise to the top
+      if (aSelected && !bSelected) return -1;
+      if (!aSelected && bSelected) return 1;
+      
+      // Within each group (selected/unselected), sort alphabetically
+      return a.name.localeCompare(b.name);
+    });
 
   const renderContact = ({ item }: { item: DeviceContact }) => {
     const isSelected = isContactSelected(item);
