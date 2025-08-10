@@ -28,10 +28,10 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.memorycare.phone",
+      "bundleIdentifier": "com.mokeyline.memorycarephone",
       "icon": "./assets/icon.png",
       "infoPlist": {
-        "NSContactsUsageDescription": "This app needs access to contacts to help you call and message your loved ones.",
+        "NSContactsUsageDescription": "This app accesses your contacts to display them for easy calling and messaging. All contact data remains on your device and is never uploaded to any server.",
         "NSMicrophoneUsageDescription": "This app needs microphone access to make phone calls.",
         "NSSMSUsageDescription": "This app needs SMS access to send text messages to your contacts.",
         "ITSAppUsesNonExemptEncryption": false
@@ -43,7 +43,7 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.memorycare.phone",
+      "package": "com.mokeyline.memorycarephone",
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
@@ -66,7 +66,7 @@
       [
         "expo-contacts",
         {
-          "contactsPermission": "Allow Memory Care Phone to access your contacts to help you call and message your loved ones."
+          "contactsPermission": "Allow Memory Care Phone to access your contacts to display them for easy calling and messaging. All contact data remains on your device and is never uploaded to any server."
         }
       ]
     ],
