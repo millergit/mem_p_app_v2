@@ -2,7 +2,7 @@
   "expo": {
     "name": "My Contacts",
     "slug": "memory-care-phone",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -37,6 +37,7 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
+    "privacyPolicy": "https://sites.google.com/view/assistive-memory-phone-app/privacy-policy",
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
