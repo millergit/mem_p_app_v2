@@ -48,11 +48,95 @@ export default function ContactsScreen({ onContactPress, onPinEntryPress }: Cont
       const contactsString = await AsyncStorage.getItem('selected_contacts');
       if (contactsString) {
         const selectedContacts = JSON.parse(contactsString);
-        setContacts(selectedContacts);
-        contactsCache = selectedContacts;
+        // If we have stored contacts and they're not empty, use them
+        if (selectedContacts && selectedContacts.length > 0) {
+          setContacts(selectedContacts);
+          contactsCache = selectedContacts;
+        } else {
+          // If stored contacts are empty, load demo contacts
+          const demoContacts = [
+            {
+              id: '1',
+              name: 'Mom',
+              phoneNumber: '(555) 123-4567',
+              birthdate: 'January 15'
+            },
+            {
+              id: '2',
+              name: 'Dad',
+              phoneNumber: '(555) 234-5678',
+              birthdate: 'March 22'
+            },
+            {
+              id: '3',
+              name: 'Sister Sarah',
+              phoneNumber: '(555) 345-6789',
+              birthdate: 'July 8'
+            },
+            {
+              id: '4',
+              name: 'Brother Mike',
+              phoneNumber: '(555) 456-7890',
+              birthdate: 'December 3'
+            },
+            {
+              id: '5',
+              name: 'Grandma',
+              phoneNumber: '(555) 567-8901',
+              birthdate: 'September 14'
+            },
+            {
+              id: '6',
+              name: 'Doctor Smith',
+              phoneNumber: '(555) 678-9012',
+              birthdate: 'May 27'
+            }
+          ];
+          setContacts(demoContacts);
+          contactsCache = demoContacts;
+        }
       } else {
-        setContacts([]);
-        contactsCache = [];
+        // Load demo contacts for app review
+        const demoContacts = [
+          {
+            id: '1',
+            name: 'Mom',
+            phoneNumber: '(555) 123-4567',
+            birthdate: 'January 15'
+          },
+          {
+            id: '2',
+            name: 'Dad',
+            phoneNumber: '(555) 234-5678',
+            birthdate: 'March 22'
+          },
+          {
+            id: '3',
+            name: 'Sister Sarah',
+            phoneNumber: '(555) 345-6789',
+            birthdate: 'July 8'
+          },
+          {
+            id: '4',
+            name: 'Brother Mike',
+            phoneNumber: '(555) 456-7890',
+            birthdate: 'December 3'
+          },
+          {
+            id: '5',
+            name: 'Grandma',
+            phoneNumber: '(555) 567-8901',
+            birthdate: 'September 14'
+          },
+          {
+            id: '6',
+            name: 'Doctor Smith',
+            phoneNumber: '(555) 678-9012',
+            birthdate: 'May 27'
+          }
+        ];
+        setContacts(demoContacts);
+        contactsCache = demoContacts;
       }
     } catch (error) {
       console.error('Failed to load selected contacts:', error);
@@ -79,6 +163,14 @@ export default function ContactsScreen({ onContactPress, onPinEntryPress }: Cont
   return (
     <View style={{ flex: 1, backgroundColor: '#000', paddingTop: insets.top }}>
       <View style={styles.container}>
+        <View style={styles.headerContainer}>
+          <TouchableOpacity 
+            style={styles.settingsButton}
+            onPress={onPinEntryPress}
+          >
+            <Text style={styles.settingsButtonText}>⚙️ Settings</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.contentWrapper}>
           {isLoading ? (
             <View style={styles.loadingContainer}>
@@ -88,28 +180,13 @@ export default function ContactsScreen({ onContactPress, onPinEntryPress }: Cont
             <View style={styles.container}>
               <View style={styles.instructionsContainer}>
                 <Text style={styles.instructionsText}>
-                  Long press the first contact below to open the hidden settings menu to add contacts (pin:1234)
+                  Use the Settings button above to manage your contacts
                 </Text>
               </View>
-              <FlatList
-                data={[{
-                  id: 'setup',
-                  name: 'Long press first contact tile (this tile) to enter settings',
-                  phoneNumber: 'Long press to open settings',
-                  birthdate: 'Setup contact'
-                }]}
-                renderItem={({ item }) => (
-                  <ContactCard 
-                    contact={item} 
-                    onPress={() => {}} // No action on regular press
-                    onLongPress={onPinEntryPress} // Open settings on long press
-                  />
-                )}
-                keyExtractor={(item) => item.id}
-                numColumns={2}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.listContent}
-              />
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No contacts loaded yet</Text>
+                <Text style={styles.emptySubtext}>Use the Settings button to add contacts</Text>
+              </View>
             </View>
           ) : (
             <FlatList
@@ -132,6 +209,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  settingsButton: {
+    backgroundColor: '#333',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#555',
+  },
+  settingsButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   contentWrapper: {
     flex: 1,
     backgroundColor: '#000',
@@ -146,6 +242,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     lineHeight: 18,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
   },
   listContent: {
     padding: 8,

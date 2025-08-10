@@ -104,7 +104,8 @@ export default function App() {
   };
 
   const handlePinEntryPress = () => {
-    setShowPinModal(true);
+    // Skip PIN for demo mode - go directly to settings
+    setCurrentScreen('settings');
   };
 
   const handlePinSuccess = () => {
