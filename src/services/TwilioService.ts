@@ -168,10 +168,21 @@ class TwilioService {
           }
         }
         
-        // Only update timestamp if we actually processed new messages
-        if (hasNewMessages) {
-          this.lastFetchedTimestamp = latestMessageTimestamp + 1; // Add 1ms to avoid re-processing the same message
+        // Always update timestamp to prevent re-processing same messages
+        if (inboundMessages.length > 0) {
+          // Find the most recent message timestamp
+          const mostRecentTimestamp = Math.max(
+            ...inboundMessages.map(msg => new Date(msg.date_sent).getTime()),
+            this.lastFetchedTimestamp
+          );
+          this.lastFetchedTimestamp = mostRecentTimestamp + 1;
           console.log(`Updated last fetched timestamp to: ${new Date(this.lastFetchedTimestamp).toISOString()}`);
+        }
+        
+        if (hasNewMessages) {
+          console.log(`✅ Actually processed ${hasNewMessages ? 'some' : 'no'} truly new messages`);
+        } else {
+          console.log(`🔍 No new messages since ${new Date(this.lastFetchedTimestamp).toISOString()}`);
         }
         
         return hasNewMessages;
