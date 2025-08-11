@@ -52,7 +52,13 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
     }, 100);
     
     // Set up polling to refresh messages periodically
-    const interval = setInterval(loadMessages, 5000);
+    const interval = setInterval(async () => {
+      const hasNewMessages = await TwilioService.fetchRecentMessages();
+      if (hasNewMessages) {
+        // Only reload and auto-scroll if there are actually new messages
+        loadMessages(true);
+      }
+    }, 5000);
     
     return () => {
       clearTimeout(initTimer);
@@ -73,25 +79,31 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
     }
   };
 
-  const loadMessages = async () => {
+  const loadMessages = async (shouldAutoScroll: boolean = false) => {
     await MessageService.loadConversations();
+    
     const conversationMessages = MessageService.getMessages(contact.phoneNumber);
-    setMessages(conversationMessages);
+    
+    console.log(`Loading messages for ${contact.phoneNumber}: found ${conversationMessages.length} messages`);
+    
+    setMessages([...conversationMessages]);
     
     // Mark messages as read
     await MessageService.markAsRead(contact.phoneNumber);
     
-    // Set initial load to false after first load
+    // Only auto-scroll when explicitly requested or on initial load
     if (initialLoad) {
       setInitialLoad(false);
-    }
-    
-    // Scroll to bottom after messages load
-    setTimeout(() => {
-      if (conversationMessages.length > 0) {
+      setTimeout(() => {
+        if (conversationMessages.length > 0) {
+          flatListRef.current?.scrollToEnd({ animated: false });
+        }
+      }, 100);
+    } else if (shouldAutoScroll) {
+      setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
-      }
-    }, 100);
+      }, 100);
+    }
   };
 
   const checkTwilioConfig = async () => {
@@ -198,13 +210,8 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
       await TwilioService.sendSMS(contact.phoneNumber, message.trim(), contact.id);
       setMessage('');
       
-      // Refresh messages after sending
-      await loadMessages();
-      
-      // Scroll to bottom to show new message
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 200);
+      // Refresh messages after sending and auto-scroll to show sent message
+      await loadMessages(true);
       
       // Show clear success confirmation
       Alert.alert(
@@ -229,6 +236,25 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
     } finally {
       setIsSending(false);
     }
+  };
+
+  const clearAllMessages = async () => {
+    Alert.alert(
+      'Clear All Messages?',
+      'This will delete all stored messages and start fresh. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            await MessageService.clearAllConversations();
+            setMessages([]);
+            Alert.alert('Messages Cleared', 'All messages have been deleted.');
+          }
+        }
+      ]
+    );
   };
 
   const formatTime = (timestamp: number) => {
@@ -264,6 +290,9 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Message {contact.name}</Text>
+        <TouchableOpacity style={styles.clearButton} onPress={clearAllMessages}>
+          <Text style={styles.clearButtonText}>Clear</Text>
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView 
@@ -286,10 +315,8 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
                 contentContainerStyle={styles.messagesContent}
                 showsVerticalScrollIndicator={false}
                 onContentSizeChange={() => {
-                  // Auto-scroll when content changes (new messages)
-                  if (messages.length > 0) {
-                    flatListRef.current?.scrollToEnd({ animated: true });
-                  }
+                  // Only auto-scroll when content changes if it's the initial load
+                  // Removed automatic scrolling to prevent disrupting user reading
                 }}
               />
             ) : (
@@ -384,6 +411,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
     flex: 1,
+  },
+  clearButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  clearButtonText: {
+    fontSize: 16,
+    color: '#ff4444',
+    fontWeight: 'bold',
   },
   keyboardContainer: {
     flex: 1,

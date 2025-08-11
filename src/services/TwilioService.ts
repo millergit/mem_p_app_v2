@@ -1,6 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MessageService from './MessageService';
 
+// Normalize phone number to E.164 format for consistent storage/lookup
+function normalizePhoneNumber(phoneNumber: string): string {
+  // Remove all non-digit characters
+  const digits = phoneNumber.replace(/\D/g, '');
+  
+  // If it starts with 1 and has 11 digits (US/Canada), format as +1XXXXXXXXXX
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`;
+  }
+  
+  // If it has 10 digits, assume US/Canada and add +1
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+  
+  // Otherwise, add + if not already present
+  return digits.startsWith('+') ? phoneNumber : `+${digits}`;
+}
+
 export interface TwilioConfig {
   accountSid: string;
   authToken: string;
@@ -13,6 +32,7 @@ class TwilioService {
   private pollingInterval: NodeJS.Timeout | null = null;
   private pollingMode: 'active' | 'background' | 'conversation' = 'background';
   private appState: 'active' | 'background' = 'active';
+  private lastFetchedTimestamp: number = Date.now() - (24 * 60 * 60 * 1000); // Start from 24 hours ago
 
   async loadConfig(): Promise<TwilioConfig | null> {
     try {
@@ -79,8 +99,9 @@ class TwilioService {
       );
 
       if (response.ok) {
-        // Store the sent message locally
-        await MessageService.addMessage(contactId || 'unknown', to, message, 'sent');
+        // Store the sent message locally using normalized phone number
+        const normalizedTo = normalizePhoneNumber(to);
+        await MessageService.addMessage(contactId || 'unknown', normalizedTo, message, 'sent');
         return true;
       } else {
         const error = await response.json();
@@ -92,49 +113,84 @@ class TwilioService {
     }
   }
 
-  async fetchRecentMessages(): Promise<void> {
-    if (!this.config) return;
+  async fetchRecentMessages(): Promise<boolean> {
+    if (!this.config) return false;
 
     try {
       const auth = btoa(`${this.config.accountSid}:${this.config.authToken}`);
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       
-      const response = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${this.config.accountSid}/Messages.json?DateSent>=${twentyFourHoursAgo}&To=${this.config.phoneNumber}`,
-        {
-          headers: {
-            'Authorization': `Basic ${auth}`,
-          },
-        }
-      );
+      // Only fetch messages since our last check (much more efficient!)
+      const sinceDate = new Date(this.lastFetchedTimestamp).toISOString();
+      const baseUrl = `https://api.twilio.com/2010-04-01/Accounts/${this.config.accountSid}/Messages.json`;
+      const params = new URLSearchParams({
+        'DateSent>=': sinceDate,
+        'To': this.config.phoneNumber
+      });
+      
+      console.log(`Checking for new messages since: ${sinceDate}`);
+      
+      const response = await fetch(`${baseUrl}?${params.toString()}`, {
+        headers: {
+          'Authorization': `Basic ${auth}`,
+        },
+      });
 
       if (response.ok) {
         const data = await response.json();
-        for (const twilioMessage of data.messages) {
-          // Only process received messages that we haven't seen before
-          if (twilioMessage.direction === 'inbound') {
-            const existingMessages = MessageService.getMessages(twilioMessage.from);
-            const messageExists = existingMessages.some(msg => 
-              Math.abs(msg.timestamp - new Date(twilioMessage.date_sent).getTime()) < 5000 && 
-              msg.text === twilioMessage.body
-            );
+        
+        // Handle case where messages might be undefined
+        if (!data || !Array.isArray(data.messages)) {
+          console.log('No messages array in response:', data);
+          return false;
+        }
+        
+        const inboundMessages = data.messages.filter(msg => msg && msg.direction === 'inbound');
+        
+        console.log(`Found ${inboundMessages.length} new inbound messages`);
+        
+        let hasNewMessages = false;
+        let latestMessageTimestamp = this.lastFetchedTimestamp;
+        
+        for (const twilioMessage of inboundMessages) {
+          const messageTimestamp = new Date(twilioMessage.date_sent).getTime();
+          
+          // Only process messages newer than our last fetch
+          if (messageTimestamp > this.lastFetchedTimestamp) {
+            console.log(`New message from ${twilioMessage.from}: "${twilioMessage.body}"`);
             
-            if (!messageExists) {
-              await MessageService.addMessage('unknown', twilioMessage.from, twilioMessage.body, 'received');
-            }
+            const normalizedFrom = normalizePhoneNumber(twilioMessage.from);
+            await MessageService.addMessage('unknown', normalizedFrom, twilioMessage.body, 'received', messageTimestamp, twilioMessage.sid);
+            hasNewMessages = true;
+            
+            
+            // Track the latest message timestamp we've processed
+            latestMessageTimestamp = Math.max(latestMessageTimestamp, messageTimestamp);
           }
         }
+        
+        // Only update timestamp if we actually processed new messages
+        if (hasNewMessages) {
+          this.lastFetchedTimestamp = latestMessageTimestamp + 1; // Add 1ms to avoid re-processing the same message
+          console.log(`Updated last fetched timestamp to: ${new Date(this.lastFetchedTimestamp).toISOString()}`);
+        }
+        
+        return hasNewMessages;
+      } else {
+        const errorText = await response.text();
+        console.error('Twilio API error:', response.status, errorText);
+        return false;
       }
     } catch (error) {
       console.error('Failed to fetch messages:', error);
+      return false;
     }
   }
 
   private getPollingInterval(): number {
     switch (this.pollingMode) {
-      case 'conversation': return 10000;  // 10 seconds when viewing messages
-      case 'active': return 30000;        // 30 seconds when app open
-      case 'background': return 120000;   // 2 minutes when backgrounded
+      case 'conversation': return 5000;   // 3 seconds when actively viewing messages
+      case 'active': return 30000;        // 15 seconds when app open but not viewing messages  
+      case 'background': return 120000;    // 1 minute when backgrounded
     }
   }
 
@@ -143,8 +199,8 @@ class TwilioService {
       clearInterval(this.pollingInterval);
     }
     
-    this.pollingInterval = setInterval(() => {
-      this.fetchRecentMessages();
+    this.pollingInterval = setInterval(async () => {
+      await this.fetchRecentMessages();
     }, this.getPollingInterval());
   }
 
@@ -157,7 +213,7 @@ class TwilioService {
     // Start polling
     this.restartPolling();
     
-    // Fetch immediately
+    // Fetch immediately 
     this.fetchRecentMessages();
   }
 
@@ -175,6 +231,11 @@ class TwilioService {
       clearInterval(this.pollingInterval);
       this.pollingInterval = null;
     }
+  }
+
+  // Expose normalize function for external use
+  normalizePhoneNumber(phoneNumber: string): string {
+    return normalizePhoneNumber(phoneNumber);
   }
 
   async makeCall(to: string): Promise<boolean> {
