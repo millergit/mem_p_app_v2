@@ -6,6 +6,7 @@ export interface Message {
   timestamp: number;
   type: 'sent' | 'received';
   status?: 'sending' | 'sent' | 'failed';
+  isVisible?: boolean; // False for caregiver notifications, system messages, etc.
 }
 
 export interface Conversation {

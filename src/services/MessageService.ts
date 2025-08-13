@@ -48,7 +48,7 @@ class MessageService {
     }
   }
 
-  async addMessage(contactId: string, phoneNumber: string, text: string, type: 'sent' | 'received', customTimestamp?: number, customId?: string): Promise<Message> {
+  async addMessage(contactId: string, phoneNumber: string, text: string, type: 'sent' | 'received', customTimestamp?: number, customId?: string, isVisible: boolean = true): Promise<Message> {
     const normalizedPhone = normalizePhoneNumber(phoneNumber);
     
     let conversation = this.conversations.get(normalizedPhone);
@@ -84,7 +84,8 @@ class MessageService {
       text,
       timestamp: customTimestamp || Date.now(),
       type,
-      status: type === 'sent' ? 'sent' : undefined
+      status: type === 'sent' ? 'sent' : undefined,
+      isVisible
     };
 
     conversation.messages.push(message);
@@ -112,7 +113,8 @@ class MessageService {
   getMessages(phoneNumber: string): Message[] {
     const normalizedPhone = normalizePhoneNumber(phoneNumber);
     const conversation = this.conversations.get(normalizedPhone);
-    return conversation ? conversation.messages : [];
+    // Only return visible messages (filter out caregiver notifications)
+    return conversation ? conversation.messages.filter(msg => msg.isVisible !== false) : [];
   }
 
   async markAsRead(phoneNumber: string): Promise<void> {

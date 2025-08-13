@@ -183,9 +183,16 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
         // Notify caregiver of blocked communication
         await caregiverNotifications.onCommunicationBlocked();
         
+        // Show the blocked message as "sent" to the user so they don't know it was blocked
+        await MessageService.addMessage(contact.id, contact.phoneNumber, message.trim(), 'sent');
+        
         await new Promise(resolve => setTimeout(resolve, 800));
         
         setMessage('');
+        Keyboard.dismiss();
+        
+        // Refresh messages to show the "sent" message and auto-scroll
+        await loadMessages(true);
         
         Alert.alert(
           'Message Sent Successfully! ✅',
@@ -193,8 +200,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
           [
             { 
               text: 'OK', 
-              style: 'default',
-              onPress: () => onBack() 
+              style: 'default'
             }
           ],
           { cancelable: false }
@@ -209,6 +215,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
       
       await TwilioService.sendSMS(contact.phoneNumber, message.trim(), contact.id);
       setMessage('');
+      Keyboard.dismiss();
       
       // Refresh messages after sending and auto-scroll to show sent message
       await loadMessages(true);
@@ -220,8 +227,7 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
         [
           { 
             text: 'OK', 
-            style: 'default',
-            onPress: () => onBack() 
+            style: 'default'
           }
         ],
         { cancelable: false }
@@ -238,49 +244,77 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
     }
   };
 
-  const clearAllMessages = async () => {
-    Alert.alert(
-      'Clear All Messages?',
-      'This will delete all stored messages and start fresh. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: async () => {
-            await MessageService.clearAllConversations();
-            setMessages([]);
-            Alert.alert('Messages Cleared', 'All messages have been deleted.');
-          }
-        }
-      ]
-    );
-  };
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const renderMessage = ({ item: msg }: { item: Message }) => (
-    <View style={[
-      styles.messageBubble,
-      msg.type === 'sent' ? styles.sentMessage : styles.receivedMessage
-    ]}>
-      <Text style={[
-        styles.messageText,
-        msg.type === 'sent' ? styles.sentMessageText : styles.receivedMessageText
-      ]}>
-        {msg.text}
-      </Text>
-      <Text style={[
-        styles.messageTime,
-        msg.type === 'sent' ? styles.sentMessageTime : styles.receivedMessageTime
-      ]}>
-        {formatTime(msg.timestamp)}
-      </Text>
-    </View>
-  );
+  const formatDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    // Check if it's today
+    if (date.toDateString() === today.toDateString()) {
+      return 'Today';
+    }
+    
+    // Check if it's yesterday
+    if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    }
+    
+    // Otherwise format as date
+    return date.toLocaleDateString([], { 
+      weekday: 'long',
+      month: 'short', 
+      day: 'numeric'
+    });
+  };
+
+  const shouldShowDateSeparator = (currentMessage: Message, previousMessage?: Message) => {
+    if (!previousMessage) return true;
+    
+    const currentDate = new Date(currentMessage.timestamp);
+    const previousDate = new Date(previousMessage.timestamp);
+    
+    // Show date separator if messages are on different days
+    return currentDate.toDateString() !== previousDate.toDateString();
+  };
+
+  const renderMessage = ({ item: msg, index }: { item: Message, index: number }) => {
+    const previousMessage = index > 0 ? messages[index - 1] : undefined;
+    const showDate = shouldShowDateSeparator(msg, previousMessage);
+    
+    return (
+      <View>
+        {showDate && (
+          <View style={styles.dateSeparator}>
+            <Text style={styles.dateSeparatorText}>{formatDate(msg.timestamp)}</Text>
+          </View>
+        )}
+        <View style={[
+          styles.messageBubble,
+          msg.type === 'sent' ? styles.sentMessage : styles.receivedMessage
+        ]}>
+          <Text style={[
+            styles.messageText,
+            msg.type === 'sent' ? styles.sentMessageText : styles.receivedMessageText
+          ]}>
+            {msg.text}
+          </Text>
+          <Text style={[
+            styles.messageTime,
+            msg.type === 'sent' ? styles.sentMessageTime : styles.receivedMessageTime
+          ]}>
+            {formatTime(msg.timestamp)}
+          </Text>
+        </View>
+      </View>
+    );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000', paddingTop: insets.top }}>
@@ -290,9 +324,6 @@ export default function MessageScreen({ contact, onBack }: MessageScreenProps) {
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Message {contact.name}</Text>
-        <TouchableOpacity style={styles.clearButton} onPress={clearAllMessages}>
-          <Text style={styles.clearButtonText}>Clear</Text>
-        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView 
@@ -411,15 +442,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
     flex: 1,
-  },
-  clearButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  clearButtonText: {
-    fontSize: 16,
-    color: '#ff4444',
-    fontWeight: 'bold',
   },
   keyboardContainer: {
     flex: 1,
@@ -564,5 +586,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  dateSeparator: {
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dateSeparatorText: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '500',
+    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
 });

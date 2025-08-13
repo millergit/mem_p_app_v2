@@ -153,7 +153,7 @@ class CaregiverNotificationService {
     // Get recent violations for context
     const recentViolations = this.getRecentViolations(blockedMessages, blockedCalls);
     
-    const alertMessage = `⚠️ COMMUNICATION ALERT: ${todayCount} blocked communications today.\n\nRecent violations:\n${recentViolations}\n\nThis alert will not repeat until manually reset.`;
+    const alertMessage = `My Care Phone Alert (Level 1): ${todayCount} blocked communications today.\n\nRecent:\n${recentViolations}\n\nThis alert will not repeat until manually reset.`;
 
     if (this.settings?.smsEnabled && this.settings?.phoneNumber) {
       await this.sendSMSAlert(alertMessage);
@@ -168,7 +168,7 @@ class CaregiverNotificationService {
     // Get recent violations for context  
     const recentViolations = this.getRecentViolations(blockedMessages, blockedCalls);
     
-    const alertMessage = `🚨 ESCALATION ALERT: ${todayCount} blocked communications today (significant increase).\n\nRecent violations:\n${recentViolations}\n\nImmediate attention recommended.`;
+    const alertMessage = `My Care Phone Alert (Level 2): ${todayCount} blocked communications today.\n\nRecent:\n${recentViolations}\n\nThis alert will not repeat until manually reset.`;
 
     if (this.settings?.smsEnabled && this.settings?.phoneNumber) {
       await this.sendSMSAlert(alertMessage);

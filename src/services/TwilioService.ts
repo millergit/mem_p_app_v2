@@ -101,7 +101,9 @@ class TwilioService {
       if (response.ok) {
         // Store the sent message locally using normalized phone number
         const normalizedTo = normalizePhoneNumber(to);
-        await MessageService.addMessage(contactId || 'unknown', normalizedTo, message, 'sent');
+        // Check if this is a caregiver notification (should be hidden from user)
+        const isCaregiverrNotification = message.includes('blocked') || message.includes('violation') || message.includes('frequency');
+        await MessageService.addMessage(contactId || 'unknown', normalizedTo, message, 'sent', undefined, undefined, !isCaregiverrNotification);
         return true;
       } else {
         const error = await response.json();

@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import FrequencyTracker, { BlockedMessage, BlockedCall } from '../services/FrequencyTracker';
 import CaregiverNotificationService, { CaregiverSettings } from '../services/CaregiverNotificationService';
 import BlockedCommunicationsScreen from './BlockedCommunicationsScreen';
+import MessageService from '../services/MessageService';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -231,6 +232,28 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
               Alert.alert('Test Sent', 'Test notification has been sent to the caregiver.');
             } catch (error) {
               Alert.alert('Test Failed', 'Could not send test notification.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const clearAllMessages = async () => {
+    Alert.alert(
+      'Clear All Messages?',
+      'This will delete all stored text message history. This cannot be undone.\n\nNote: This only clears locally stored messages, not messages on Twilio servers.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await MessageService.clearAllConversations();
+              Alert.alert('Messages Cleared', 'All message history has been deleted from this device.');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to clear messages. Please try again.');
             }
           }
         }
@@ -1007,6 +1030,24 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
                 </TouchableOpacity>
               </View>
             </View>
+
+            <View style={styles.settingItem}>
+              <View style={styles.settingHeader}>
+                <Text style={styles.settingTitle}>Clear Message History</Text>
+                <Text style={styles.settingDescription}>
+                  Delete all stored text message conversations from this device. This does not affect messages stored on Twilio servers.
+                </Text>
+              </View>
+              
+              <TouchableOpacity
+                style={[styles.button, styles.destructiveButton]}
+                onPress={clearAllMessages}
+              >
+                <Text style={[styles.buttonText, styles.destructiveButtonText]}>
+                  Clear All Messages
+                </Text>
+              </TouchableOpacity>
+            </View>
           </ScrollView>
         )}
       </View>
@@ -1155,6 +1196,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  button: {
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  buttonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  destructiveButton: {
+    backgroundColor: '#FF5722',
+  },
+  destructiveButtonText: {
+    color: '#fff',
   },
   settingItem: {
     backgroundColor: '#1a1a1a',
